@@ -224,15 +224,39 @@
 }
 
 .markdown-body h1 {
-  @apply text-2xl font-semibold mb-4 pb-2 border-b border-border mt-6;
+  @apply text-3xl font-semibold mb-4 pb-2 border-b border-border mt-6;
 }
 
 .markdown-body h2 {
-  @apply text-xl font-semibold mb-4 pb-1 border-b border-border mt-6;
+  @apply text-2xl font-semibold mb-4 pb-1 border-b border-border mt-6;
+}
+
+.markdown-body h3 {
+  @apply text-xl font-semibold mb-4 mt-6;
+}
+
+.markdown-body h4 {
+  @apply text-lg font-semibold mb-4 mt-6;
+}
+
+.markdown-body h5 {
+  @apply text-base font-semibold mb-4 mt-6;
 }
 
 .markdown-body p {
   @apply mb-4;
+}
+
+.markdown-body a {
+  @apply text-primary hover:underline;
+}
+
+.markdown-body hr {
+  @apply h-[1px] bg-border border-0 my-6;
+}
+
+.markdown-body img {
+  @apply max-w-full box-content bg-background;
 }
 
 .markdown-body ul, .markdown-body ol {

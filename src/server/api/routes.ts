@@ -46,6 +46,21 @@ const validate = (schema: z.ZodSchema) => (req: any, res: any, next: any) => {
   }
 };
 
+// Readme endpoint
+apiRouter.get('/readme', async (req, res) => {
+  try {
+    const readmePath = path.join(process.cwd(), 'README.md');
+    if (fs.existsSync(readmePath)) {
+      const content = fs.readFileSync(readmePath, 'utf8');
+      res.json({ success: true, content });
+    } else {
+      res.status(404).json({ success: false, error: 'README.md not found' });
+    }
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch README');
+  }
+});
+
 // Gemini Content endpoint (to be used by frontend for generation)
 apiRouter.get('/gemini/content', async (req, res) => {
   try {

@@ -50,6 +50,43 @@ This application is engineered for enterprise-grade production environments:
     ```
     *(Note: The bucket name must be globally unique).*
 
+### 🗄️ Detailed Guide: Making SQLite Persistent with GCS FUSE
+
+Running SQLite in Cloud Run requires special configuration because Cloud Run instances are ephemeral. By default, any changes to a local SQLite file are lost when the instance spins down. To solve this, we use **Cloud Storage FUSE**, which mounts a GCS bucket as a local file system inside the container.
+
+Here is exactly how to configure it:
+
+**1. Enable the Second Generation Execution Environment**
+Cloud Storage FUSE requires the Cloud Run Gen 2 execution environment because it needs Linux kernel features (like FUSE) that aren't available in Gen 1.
+```bash
+# This flag is required when deploying
+--execution-environment gen2
+```
+
+**2. Configure the Volume Mount**
+You must tell Cloud Run to mount the GCS bucket you created earlier to a specific path inside the container. Our application expects data to be in `/app/data`.
+```bash
+# 1. Define the volume (linking it to your bucket)
+--add-volume=name=sqlite-data,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data
+
+# 2. Mount the volume inside the container
+--add-volume-mount=volume=sqlite-data,mount-path=/app/data
+```
+
+**3. SQLite Optimizations for Network Storage**
+Because GCS FUSE is a network file system, latency is higher than a local SSD. The application code (`src/server/db/sqlite.ts`) is already optimized for this with specific PRAGMAs. You do not need to run these manually, but it is important to understand why they exist:
+*   `PRAGMA journal_mode = WAL;` (Write-Ahead Logging improves concurrency on network drives)
+*   `PRAGMA synchronous = NORMAL;` (Reduces the number of fsync() calls)
+*   `PRAGMA busy_timeout = 5000;` (Waits up to 5 seconds if the database is locked by another process)
+
+**4. Single Instance Concurrency**
+SQLite does not support distributed writes across multiple machines. If Cloud Run scales to 2 or more instances, they will both try to write to the same SQLite file over GCS FUSE, leading to `database is locked` errors or corruption. You **must** restrict Cloud Run to a single instance:
+```bash
+--max-instances 1
+```
+
+*(Note: These flags are automatically handled if you use the provided `cloudbuild.yaml` in Step 5. If you deploy manually via `gcloud run deploy`, you must include them).*
+
 ---
 
 ## 🔐 Step 2: Service Accounts and Permissions

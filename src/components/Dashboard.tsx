@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [readmeContent, setReadmeContent] = useState<string>('');
 
   // Debug Console State
   const [debugLogs, setDebugLogs] = useState<AppLog[]>([]);
@@ -273,11 +274,12 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     try {
-      const [runsRes, metricsRes, filesRes, analyticsRes] = await Promise.all([
+      const [runsRes, metricsRes, filesRes, analyticsRes, readmeRes] = await Promise.all([
         fetchJson(`/api/v1/sync-runs?page=${syncRunsPage}&limit=10`),
         fetchJson('/api/v1/source-metrics'),
         fetchJson('/api/v1/files'),
-        fetchJson('/api/v1/analytics')
+        fetchJson('/api/v1/analytics'),
+        fetchJson('/api/v1/readme')
       ]);
 
       if (runsRes.success) {
@@ -297,6 +299,7 @@ export default function Dashboard() {
       if (metricsRes.success) setMetrics(metricsRes.data);
       if (filesRes?.success) setFiles(filesRes.data);
       if (analyticsRes?.success) setAnalytics(analyticsRes.data);
+      if (readmeRes?.success) setReadmeContent(readmeRes.content);
     } catch (error) {
       console.error("Fetch error:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -745,72 +748,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div className="p-8 markdown-body">
-                          <div className="flex items-center gap-3 mb-6">
-                            <h1 className="!mb-0 !pb-0 !border-0 !mt-0">⚡ GCP Datanator Dashboard</h1>
-                            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">v0.9.0</Badge>
-                          </div>
-                          
-                          <p className="text-lg text-muted-foreground leading-relaxed">
-                            Welcome to the GCP Datanator control plane. This system orchestrates the ingestion, transformation, and synthesis of technical data feeds from across the Google Cloud ecosystem into a unified knowledge base.
-                          </p>
-                          
-                          <div className="flex flex-wrap gap-2 my-6">
-                            <Badge variant="secondary" className="rounded-md font-mono text-xs"><Database className="w-3 h-3 mr-1" /> SQLite WAL</Badge>
-                            <Badge variant="secondary" className="rounded-md font-mono text-xs"><Activity className="w-3 h-3 mr-1" /> {metrics.length} Sources</Badge>
-                            <Badge variant="secondary" className="rounded-md font-mono text-xs"><Sparkles className="w-3 h-3 mr-1" /> Gemini AI</Badge>
-                            <Badge variant="secondary" className="rounded-md font-mono text-xs"><Terminal className="w-3 h-3 mr-1" /> Express.js</Badge>
-                          </div>
-
-                          <h2>System Overview</h2>
-                          <p>GCP Datanator is built for high-reliability and data sovereignty, ensuring your engineering teams always have access to the latest technical updates without relying on third-party SaaS aggregators.</p>
-                          
-                          <ul className="space-y-2 mt-4">
-                            <li className="flex items-start gap-2">
-                              <div className="mt-1 bg-green-500/20 p-1 rounded-full"><CheckCircle2 className="w-3 h-3 text-green-500" /></div>
-                              <span><strong>ETL Pipeline:</strong> Automated ingestion from {metrics.length} distinct data sources with atomic transactions and sequential processing.</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <div className="mt-1 bg-blue-500/20 p-1 rounded-full"><Activity className="w-3 h-3 text-blue-500" /></div>
-                              <span><strong>Self-Healing:</strong> Automatically detects and recovers from stuck sync jobs or unexpected container restarts.</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <div className="mt-1 bg-purple-500/20 p-1 rounded-full"><Sparkles className="w-3 h-3 text-purple-500" /></div>
-                              <span><strong>Intelligence Engine:</strong> Gemini-powered synthesis of raw feeds into actionable briefs.</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <div className="mt-1 bg-orange-500/20 p-1 rounded-full"><Database className="w-3 h-3 text-orange-500" /></div>
-                              <span><strong>Data Sovereignty:</strong> 100% local storage and processing. No third-party cloud dependencies.</span>
-                            </li>
-                          </ul>
-
-                          <div className={`border-l-4 p-4 my-8 rounded-r-md flex items-start gap-3 ${systemStatus?.status === 'HEALTHY' ? 'bg-green-500/10 border-green-500' : 'bg-yellow-500/10 border-yellow-500'}`}>
-                            {systemStatus?.status === 'HEALTHY' ? (
-                              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
-                            ) : (
-                              <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                            )}
-                            <div>
-                              <p className="text-sm font-semibold m-0 text-foreground">System Status</p>
-                              <p className="text-sm m-0 mt-1 text-muted-foreground">
-                                The ETL pipeline is currently operating normally. All subsystems are <span className={systemStatus?.status === 'HEALTHY' ? 'text-green-600 dark:text-green-400 font-bold' : 'text-yellow-600 dark:text-yellow-400 font-bold'}>
-                                  {systemStatus?.status || 'OPERATIONAL'}
-                                </span>.
-                              </p>
-                            </div>
-                          </div>
-
-                          <h2>Quick Start</h2>
-                          <p>To initialize a manual synchronization cycle, use the <strong>Sync</strong> button in the top navigation bar. For detailed logs, visit the <strong>Logs</strong> tab.</p>
-                          
-                          <pre className="mt-4">
-                            <code>
-<span className="text-muted-foreground"># View real-time logs</span><br/>
-tail -f data/gcp-datanator.db<br/>
-<br/>
-<span className="text-muted-foreground"># Trigger manual sync via API</span><br/>
-curl -X POST http://localhost:3000/api/sync/manual
-                            </code>
-                          </pre>
+                          <ReactMarkdown>{readmeContent || 'Loading documentation...'}</ReactMarkdown>
                         </div>
                       </div>
                     </div>
