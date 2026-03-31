@@ -1,0 +1,320 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    
+    /* GitHub specific spacing */
+    --spacing-1: 4px;
+    --spacing-2: 8px;
+    --spacing-3: 12px;
+    --spacing-4: 16px;
+    --spacing-5: 24px;
+    --spacing-6: 32px;
+    --spacing-7: 40px;
+    --spacing-8: 48px;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-error: var(--error);
+    --color-info: var(--info);
+}
+
+:root {
+    /* GitHub Light Theme */
+    --background: #ffffff;
+    --foreground: #1F2328;
+    --card: #ffffff;
+    --card-foreground: #1F2328;
+    --popover: #ffffff;
+    --popover-foreground: #1F2328;
+    --primary: #0969da;
+    --primary-foreground: #ffffff;
+    --secondary: #f6f8fa;
+    --secondary-foreground: #24292f;
+    --muted: #f6f8fa;
+    --muted-foreground: #656d76;
+    --accent: #f6f8fa;
+    --accent-foreground: #1F2328;
+    --destructive: #cf222e;
+    --border: #d0d7de;
+    --input: #ffffff;
+    --ring: #0969da;
+    --radius: 6px;
+
+    /* Status Colors */
+    --success: #1a7f37;
+    --warning: #9a6700;
+    --error: #cf222e;
+    --info: #0969da;
+}
+
+.dark {
+    /* GitHub Dark Theme (High Contrast) */
+    --background: #0d1117;
+    --foreground: #e6edf3;
+    --card: #0d1117;
+    --card-foreground: #e6edf3;
+    --popover: #161b22;
+    --popover-foreground: #e6edf3;
+    --primary: #2f81f7;
+    --primary-foreground: #ffffff;
+    --secondary: #21262d;
+    --secondary-foreground: #c9d1d9;
+    --muted: #161b22;
+    --muted-foreground: #8b949e;
+    --accent: #161b22;
+    --accent-foreground: #e6edf3;
+    --destructive: #f85149;
+    --border: #30363d;
+    --input: #0d1117;
+    --ring: #2f81f7;
+
+    /* Status Colors Dark */
+    --success: #3fb950;
+    --warning: #d29922;
+    --error: #f85149;
+    --info: #2f81f7;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans antialiased;
+  }
+}
+
+/* Dashboard Layout */
+.dashboard-container {
+  @apply min-h-screen flex flex-col bg-background;
+}
+
+.dashboard-header {
+  @apply sticky top-0 z-50 w-full border-b border-border bg-[#24292f] dark:bg-[#010409] px-6 py-3 text-white;
+}
+
+.dashboard-title {
+  @apply text-lg font-semibold text-white flex items-center gap-2;
+}
+
+.dashboard-version {
+  @apply text-[10px] font-mono text-white/60 bg-white/10 px-1.5 py-0.5 rounded;
+}
+
+.dashboard-logo-box {
+  @apply w-8 h-8 bg-white/10 flex items-center justify-center text-white rounded-md border border-white/20;
+}
+
+/* Responsive Container */
+.content-container {
+  @apply container mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 2xl:px-16 max-w-[1920px] flex-1 py-6;
+}
+
+/* Navigation */
+.nav-tabs-list {
+  @apply bg-[#f6f8fa] dark:bg-[#010409] p-0 rounded-none border-b border-border w-full flex justify-start gap-2 px-6 pt-3 overflow-x-auto;
+}
+
+[data-slot="tabs-trigger"] {
+  @apply !rounded-t-md !rounded-b-none !bg-transparent !px-4 !py-2.5 !text-[14px] !font-normal !text-muted-foreground !border !border-transparent !border-b-0 !transition-all !duration-200 !shadow-none cursor-pointer whitespace-nowrap flex items-center gap-2 hover:bg-muted/50;
+}
+
+[data-slot="tabs-trigger"][data-state="active"] {
+  @apply !text-foreground !bg-background !border-border !border-b-transparent !font-semibold relative;
+}
+
+[data-slot="tabs-trigger"][data-state="active"]::before {
+  content: "";
+  @apply absolute top-0 left-0 right-0 h-[2px] bg-[#fd8c73] dark:bg-[#f78166] rounded-t-md;
+}
+
+[data-slot="tabs-trigger"]:hover:not([data-state="active"]) {
+  @apply !text-foreground;
+}
+
+/* Status Badges */
+.status-badge {
+  @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium border;
+}
+
+.status-success {
+  @apply bg-[#dafbe1] text-[#1a7f37] border-[#1a7f37]/20 dark:bg-[#1a7f37]/20 dark:text-[#3fb950];
+}
+
+.status-info {
+  @apply bg-[#ddf4ff] text-[#0969da] border-[#0969da]/20 dark:bg-[#0969da]/20 dark:text-[#2f81f7];
+}
+
+.status-warning {
+  @apply bg-[#fff8c5] text-[#9a6700] border-[#9a6700]/20 dark:bg-[#9a6700]/20 dark:text-[#d29922];
+}
+
+.status-error {
+  @apply bg-[#ffebe9] text-[#cf222e] border-[#cf222e]/20 dark:bg-[#cf222e]/20 dark:text-[#f85149];
+}
+
+/* GitHub Style Cards */
+.github-card {
+  @apply bg-card border border-border rounded-md overflow-hidden;
+}
+
+.github-card-header {
+  @apply px-4 py-3 bg-[#f6f8fa] dark:bg-[#161b22] border-b border-border flex items-center justify-between;
+}
+
+.github-card-title {
+  @apply text-sm font-semibold text-foreground;
+}
+
+/* Tables */
+.github-table {
+  @apply w-full text-left border-collapse text-[14px];
+}
+
+.github-table th {
+  @apply px-4 py-2 font-semibold text-muted-foreground bg-[#f6f8fa] dark:bg-[#161b22] border-b border-border;
+}
+
+.github-table td {
+  @apply px-4 py-2 border-b border-border bg-card transition-colors;
+}
+
+.github-table tr:last-child td {
+  @apply border-b-0;
+}
+
+.github-table tr:hover td {
+  @apply bg-[#f6f8fa] dark:bg-[#161b22]/50;
+}
+
+/* Buttons */
+/* Gemini Markdown Styling */
+.markdown-body {
+  @apply text-[14px] leading-[1.6] text-foreground max-w-[1012px] mx-auto;
+}
+
+.markdown-body h1 {
+  @apply text-2xl font-semibold mb-4 pb-2 border-b border-border mt-6;
+}
+
+.markdown-body h2 {
+  @apply text-xl font-semibold mb-4 pb-1 border-b border-border mt-6;
+}
+
+.markdown-body p {
+  @apply mb-4;
+}
+
+.markdown-body ul, .markdown-body ol {
+  @apply mb-4 pl-8 list-disc;
+}
+
+.markdown-body li {
+  @apply mb-1;
+}
+
+.markdown-body blockquote {
+  @apply border-l-4 border-[#d0d7de] dark:border-[#30363d] pl-4 text-[#656d76] dark:text-[#8b949e] mb-4;
+}
+
+.markdown-body code {
+  @apply bg-[#afb8c1]/20 dark:bg-[#6e7681]/40 px-1 py-0.5 rounded-md font-mono text-[85%];
+}
+
+.markdown-body pre {
+  @apply bg-[#f6f8fa] dark:bg-[#161b22] rounded-md p-4 mb-4 overflow-x-auto border border-border;
+}
+
+.markdown-body table {
+  @apply w-full border-collapse mb-4;
+}
+
+.markdown-body th, .markdown-body td {
+  @apply border border-[#d0d7de] dark:border-[#30363d] px-3 py-1.5;
+}
+
+.markdown-body th {
+  @apply bg-[#f6f8fa] dark:bg-[#161b22] font-semibold;
+}
+
+/* Bento Grid */
+.grid-github {
+  @apply grid grid-cols-1 lg:grid-cols-12 gap-6;
+}
+
+.content-github {
+  @apply lg:col-span-8 xl:col-span-9;
+}
+
+.sidebar-github {
+  @apply lg:col-span-4 xl:col-span-3 space-y-6;
+}
+
+/* Ultra-wide adjustments */
+@media (min-width: 1920px) {
+  .content-github {
+    @apply xl:col-span-10;
+  }
+  .sidebar-github {
+    @apply xl:col-span-2;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-[#d0d7de] dark:bg-[#30363d] rounded-full border-4 border-solid border-transparent bg-clip-padding hover:bg-[#afb8c1] dark:hover:bg-[#484f58];
+}
+
+/* Layout Utilities */
+.container-github {
+  @apply container mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-8;
+}
+
+.grid-github {
+  @apply grid grid-cols-1 md:grid-cols-12 gap-6;
+}
+
+.sidebar-github {
+  @apply md:col-span-4 lg:col-span-3;
+}
+
+.content-github {
+  @apply md:col-span-8 lg:col-span-9;
+}
