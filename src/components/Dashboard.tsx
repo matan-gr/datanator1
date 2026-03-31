@@ -8,7 +8,6 @@ import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { toast } from 'sonner';
 import { Play, Database, RefreshCw, AlertCircle, CheckCircle2, Clock, ExternalLink, Activity, Search, ChevronLeft, ChevronRight, FileText, Download, Settings, ShieldCheck, Server, Terminal, ListFilter, Sparkles, Moon, Sun, BookOpen, Eye, X, Cloud, AlertTriangle } from 'lucide-react';
-import { ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';

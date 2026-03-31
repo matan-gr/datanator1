@@ -5,9 +5,10 @@ This guide provides comprehensive, step-by-step instructions for deploying the *
 ## 🌟 Architecture & Production Readiness
 
 This application is engineered for enterprise-grade production environments:
+*   **Data Sources (Where the data comes from):** GCP Datanator automatically aggregates data from 10+ official Google Cloud and AI RSS/Atom feeds. This includes the main Google Cloud Blog, AI Research blog, Release Notes, Security Bulletins, and Service Health incidents. The ETL pipeline fetches, sanitizes, and deduplicates this data. You can view or modify these sources in `src/server/etl/extractor.ts`.
 *   **Lightweight Container:** Uses a multi-stage `node:22-alpine` Docker build. The final image contains *only* production dependencies and compiled assets (no raw TypeScript files or dev tools).
 *   **Security:** `npm ci --omit=dev` ensures no development dependencies are included in the runtime. The container runs with minimal privileges.
-*   **Persistence:** Uses Google Cloud Storage (GCS) FUSE to mount a persistent volume, ensuring the SQLite database and downloaded feeds survive ephemeral container restarts.
+*   **Persistence (GCS Configuration):** Uses Google Cloud Storage (GCS) FUSE to mount a persistent volume (`/app/data`). This ensures the SQLite database (`gcp-datanator.db`) and the downloaded text feeds survive ephemeral container restarts.
 *   **Concurrency & Stability:** SQLite is configured with WAL (Write-Ahead Logging) mode and busy timeouts. Cloud Run is configured with `--max-instances 1` and `--no-cpu-throttling` to prevent database locks and ensure background ETL jobs complete successfully without being frozen by GCP.
 
 ---
@@ -39,8 +40,11 @@ This application is engineered for enterprise-grade production environments:
       --description="Docker repository for GCP Datanator"
     ```
 
-2.  **Create a GCS Bucket for SQLite Data**:
-    Cloud Run containers are stateless. To persist the SQLite database and output files, you must mount a Google Cloud Storage (GCS) bucket.
+2.  **Create a GCS Bucket for SQLite Data & Feeds**:
+    Cloud Run containers are stateless (their local file system is wiped when the container restarts). To persist the SQLite database and the downloaded feed files, you must mount a Google Cloud Storage (GCS) bucket. 
+    
+    **How it works:** We use Cloud Storage FUSE to mount this bucket directly into the Cloud Run container at `/app/data`. This allows the application to write to the SQLite database (`/app/data/gcp-datanator.db`) and save the parsed feed files (`/app/data/feeds/*.txt`) exactly as if it were writing to a local hard drive, ensuring your data survives container restarts.
+
     ```bash
     gcloud storage buckets create gs://YOUR_PROJECT_ID-gcp-datanator-data --location=us-central1
     ```

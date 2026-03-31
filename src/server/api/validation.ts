@@ -1,25 +1,8 @@
 import { z } from 'zod';
 
-export const LoginSchema = z.object({
-  password: z.string().min(1, 'Password is required'),
-});
-
-export const SyncTriggerSchema = z.object({
-  source: z.string().optional(),
-});
-
 export const SettingUpdateSchema = z.object({
   key: z.string().min(1, 'Key is required'),
   value: z.string().min(1, 'Value is required'),
-});
-
-export const FileUploadSchema = z.object({
-  filename: z.string().min(1, 'Filename is required').regex(/^[a-zA-Z0-9._-]+$/, 'Invalid filename format'),
-  content: z.string().min(1, 'Content is required'),
-});
-
-export const GeminiBriefSchema = z.object({
-  runId: z.string().uuid('Invalid run ID'),
 });
 
 export const GCSExportSchema = z.object({

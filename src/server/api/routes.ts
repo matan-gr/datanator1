@@ -8,10 +8,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getDb } from '../db/sqlite.ts';
 import { runSync } from '../etl/pipeline.ts';
 import { 
-  LoginSchema, 
-  SyncTriggerSchema, 
   SettingUpdateSchema, 
-  GeminiBriefSchema,
   GCSExportSchema
 } from './validation.ts';
 import { z } from 'zod';

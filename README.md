@@ -4,7 +4,7 @@ GCP Datanator is a robust, enterprise-grade ETL (Extract, Transform, Load) pipel
 
 ## ✨ Key Features
 
-- **Automated Extraction:** Pulls data from 10+ official Google Cloud and AI blogs, release notes, and status feeds.
+- **Automated Extraction:** Pulls data from 10+ official Google Cloud and AI blogs, release notes, and status feeds (configured in `src/server/etl/extractor.ts`).
 - **Intelligent Deduplication:** Tracks parsed GUIDs to ensure only net-new content is processed, saving bandwidth and storage.
 - **Fail-Proof Architecture:** 
   - **Atomic Transactions:** File writes and database updates are strictly atomic. If a DB insert fails, orphaned files are automatically rolled back and deleted.
@@ -12,7 +12,7 @@ GCP Datanator is a robust, enterprise-grade ETL (Extract, Transform, Load) pipel
   - **Self-Healing:** Automatically detects and resets "stuck" sync jobs caused by unexpected server restarts.
   - **Strict Network Timeouts:** Uses `Promise.race` to prevent hanging sockets from unresponsive external servers.
   - **Dynamic User-Agents & Exponential Backoff:** Bypasses basic rate-limiting and handles transient network failures gracefully.
-- **Local Data Lake:** Saves processed data locally into a structured `data/` directory, simulating a production data lake.
+- **Local Data Lake & GCS Persistence:** Saves processed data into a structured `data/` directory. When deployed to Cloud Run, this directory is mounted to a **Google Cloud Storage (GCS)** bucket using Cloud Storage FUSE, ensuring the SQLite database and text files survive container restarts.
 - **Live React Dashboard:** A beautiful, dark-mode admin dashboard to monitor sync runs, source health, debug logs, and network activity in real-time.
 
 ## 🏗️ Architecture
