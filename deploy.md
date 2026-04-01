@@ -31,84 +31,32 @@ This application is engineered for enterprise-grade production environments:
 
 ---
 
-## 📦 Step 1: Create Artifact Registry & GCS Bucket
+## 📦 Step 1: Create GCS Bucket (for SQLite Persistence)
 
-1.  **Create an Artifact Registry Repository:**
-    Artifact Registry is where your built Docker images will be stored before being deployed to Cloud Run.
-    ```bash
-    gcloud artifacts repositories create datanator-repo \
-      --repository-format=docker \
-      --location=us-central1 \
-      --description="Docker repository for GCP Datanator"
-    ```
+Cloud Run containers are stateless (their local file system is wiped when the container restarts). To persist the SQLite database and the downloaded feed files, you must mount a Google Cloud Storage (GCS) bucket. 
 
-2.  **Create a GCS Bucket for SQLite Data & Feeds**:
-    Cloud Run containers are stateless (their local file system is wiped when the container restarts). To persist the SQLite database and the downloaded feed files, you must mount a Google Cloud Storage (GCS) bucket. 
-    
-    **How it works:** We use Cloud Storage FUSE to mount this bucket directly into the Cloud Run container at `/app/data`. This allows the application to write to the SQLite database (`/app/data/gcp-datanator.db`) and save the parsed feed files (`/app/data/feeds/*.txt`) exactly as if it were writing to a local hard drive, ensuring your data survives container restarts.
-
-    ```bash
-    gcloud storage buckets create gs://YOUR_PROJECT_ID-gcp-datanator-data --location=us-central1
-    ```
-    *(Note: The bucket name must be globally unique).*
-
-### 🗄️ Detailed Guide: Making SQLite Persistent with GCS FUSE
-
-Running SQLite in Cloud Run requires special configuration because Cloud Run instances are ephemeral. By default, any changes to a local SQLite file are lost when the instance spins down. To solve this, we use **Cloud Storage FUSE**, which mounts a GCS bucket as a local file system inside the container.
-
-Here is exactly how to configure it. If you are deploying manually using `gcloud run deploy`, you must include these specific flags:
-
-**1. Enable the Second Generation Execution Environment**
-Cloud Storage FUSE requires the Cloud Run Gen 2 execution environment because it needs Linux kernel features (like FUSE) that aren't available in Gen 1.
-`--execution-environment gen2`
-
-**2. Configure the Volume Mount**
-You must tell Cloud Run to mount the GCS bucket you created earlier to a specific path inside the container. Our application expects data to be in `/app/data`.
-`--add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data`
-`--add-volume-mount=volume=data-vol,mount-path=/app/data`
-
-**3. Single Instance Concurrency**
-SQLite does not support distributed writes across multiple machines. If Cloud Run scales to 2 or more instances, they will both try to write to the same SQLite file over GCS FUSE, leading to `database is locked` errors or corruption. You **must** restrict Cloud Run to a single instance:
-`--max-instances 1`
-
-**4. Container Port Configuration**
-The application is hardcoded to listen on port 3000. You must tell Cloud Run to route traffic to this port:
-`--port 3000`
-
-### 🚀 Complete Manual Deployment Command
-If you are not using the automated `cloudbuild.yaml` (Step 5), here is the complete, combined command to deploy the application with Gen 2 and GCS FUSE enabled:
+**How it works:** We use Cloud Storage FUSE to mount this bucket directly into the Cloud Run container at `/app/data`. This allows the application to write to the SQLite database (`/app/data/gcp-datanator.db`) and save the parsed feed files (`/app/data/feeds/*.txt`) exactly as if it were writing to a local hard drive, ensuring your data survives container restarts.
 
 ```bash
-gcloud run deploy gcp-datanator \
-  --image=us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest \
-  --region=us-central1 \
-  --service-account=gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com \
-  --allow-unauthenticated \
-  --execution-environment=gen2 \
-  --add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data \
-  --add-volume-mount=volume=data-vol,mount-path=/app/data \
-  --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
-  --set-env-vars=NODE_ENV=production \
-  --port=3000 \
-  --memory=2Gi \
-  --cpu=1 \
-  --max-instances=1 \
-  --no-cpu-throttling
+gcloud storage buckets create gs://YOUR_PROJECT_ID-gcp-datanator-data --location=us-central1
 ```
-*(Note: If you use the provided `cloudbuild.yaml` in Step 5, all of these flags are automatically handled for you).*
-
-**5. SQLite Optimizations for Network Storage**
-Because GCS FUSE is a network file system, latency is higher than a local SSD, and it does not support mmap (which WAL mode requires). The application code (`src/server/db/sqlite.ts`) is already optimized for this with specific PRAGMAs. You do not need to run these manually, but it is important to understand why they exist:
-*   `PRAGMA journal_mode = DELETE;` (WAL mode is not supported by GCS FUSE and causes corruption)
-*   `PRAGMA synchronous = FULL;` (Ensures data is safely written to the network drive)
-*   `PRAGMA busy_timeout = 10000;` (Waits up to 10 seconds if the database is locked by another process)
-*   `PRAGMA foreign_keys = ON;` (Enforces relational integrity)
-*   `BEGIN IMMEDIATE TRANSACTION` (Used during schema migrations to prevent deadlocks when multiple Cloud Run instances start concurrently)
-*   Graceful Shutdown: Intercepts `SIGTERM` and `SIGINT` signals to safely close SQLite connections (`closeDb()`) before the container exits, preventing database corruption during scale-down events.
+*(Note: The bucket name must be globally unique).*
 
 ---
 
-## 🔐 Step 2: Service Accounts and Permissions
+## 📦 Step 2: Create Artifact Registry Repository
+
+Artifact Registry is where your built Docker images will be stored before being deployed to Cloud Run.
+```bash
+gcloud artifacts repositories create datanator-repo \
+  --repository-format=docker \
+  --location=us-central1 \
+  --description="Docker repository for GCP Datanator"
+```
+
+---
+
+## 🔐 Step 3: Service Accounts and Permissions
 
 You need two service accounts: one for the application itself and one for the automated scheduler. You also need to grant Cloud Build permissions to deploy. By using dedicated service accounts, we follow the principle of least privilege.
 
@@ -159,7 +107,7 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 
 ---
 
-## 🔑 Step 3: Environment Variables and Secrets
+## 🔑 Step 4: Environment Variables and Secrets
 
 Store sensitive keys in **Secret Manager** for maximum security. This prevents hardcoding secrets in your Docker image or Cloud Run configuration.
 
@@ -182,7 +130,7 @@ Store sensitive keys in **Secret Manager** for maximum security. This prevents h
 
 ---
 
-## 📝 Step 4: Configure Deployment Variables (cloudbuild.yaml)
+## 📝 Step 5: Configure Deployment Variables (cloudbuild.yaml)
 
 The deployment process is automated using `cloudbuild.yaml`. Before deploying, you can customize the deployment variables.
 
@@ -202,7 +150,7 @@ substitutions:
 
 ---
 
-## 🚀 Step 5: Build and Deploy (One Command)
+## 🚀 Step 6: Build and Deploy (One Command)
 
 We have simplified the build and deployment process using `cloudbuild.yaml`. This file defines a pipeline that builds the Docker image, pushes it to Artifact Registry, and deploys it to Cloud Run with all the necessary volume mounts and secrets.
 
@@ -218,9 +166,46 @@ gcloud builds submit --config cloudbuild.yaml .
 > 3. It pushes the image to Artifact Registry.
 > 4. It deploys the image to Cloud Run, securely injecting the secrets from Secret Manager at runtime and mounting the GCS bucket for SQLite persistence.
 
+### 🗄️ What `cloudbuild.yaml` automates for you:
+Running SQLite in Cloud Run requires special configuration. By using the `cloudbuild.yaml` file, the following is handled automatically:
+*   **Gen 2 Execution Environment:** Required for Cloud Storage FUSE.
+*   **Volume Mounts:** Mounts your GCS bucket to `/app/data` inside the container.
+*   **Single Instance Concurrency:** Sets `--max-instances=1` so multiple containers don't lock the SQLite database.
+*   **No CPU Throttling:** Ensures background ETL jobs complete successfully.
+
 ---
 
-## ⏱️ Step 6: Automate the ETL Pipeline (Cloud Scheduler)
+## 🛠️ Alternative: Manual Deployment (Without Cloud Build)
+
+If you prefer to build and deploy manually without using `cloudbuild.yaml`, you must include all the specific flags required for GCS FUSE and SQLite to work correctly.
+
+1. **Build and push the image manually:**
+```bash
+gcloud builds submit --tag us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest -f Dockerfile.txt .
+```
+
+2. **Deploy with all required flags:**
+```bash
+gcloud run deploy gcp-datanator \
+  --image=us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest \
+  --region=us-central1 \
+  --service-account=gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --allow-unauthenticated \
+  --execution-environment=gen2 \
+  --add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data \
+  --add-volume-mount=volume=data-vol,mount-path=/app/data \
+  --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
+  --set-env-vars=NODE_ENV=production \
+  --port=3000 \
+  --memory=2Gi \
+  --cpu=1 \
+  --max-instances=1 \
+  --no-cpu-throttling
+```
+
+---
+
+## ⏱️ Step 7: Automate the ETL Pipeline (Cloud Scheduler)
 
 Create a Cloud Scheduler job to trigger the sync automatically every **Sunday, Tuesday, and Friday at 2:00 AM**.
 
@@ -238,7 +223,7 @@ gcloud scheduler jobs create http gcp-datanator-sync \
 
 ---
 
-## ⚙️ Step 7: Configure OAuth for GCS Export (Optional)
+## ⚙️ Step 8: Configure OAuth for GCS Export (Optional)
 
 If you want to use the "Export to GCS" feature in the dashboard:
 
@@ -250,7 +235,7 @@ If you want to use the "Export to GCS" feature in the dashboard:
 
 ---
 
-## 🔒 Step 8: Securing the Application (Optional but Recommended)
+## 🔒 Step 9: Securing the Application (Optional but Recommended)
 
 By default, the `cloudbuild.yaml` deploys the service with `--allow-unauthenticated`, meaning anyone on the internet can access the dashboard. For production, you should secure the application.
 
@@ -264,7 +249,7 @@ This ensures that only authorized users within your Google Workspace or specific
 
 ---
 
-## 🔄 Step 9: Continuous Deployment (GitHub Actions)
+## 🔄 Step 10: Continuous Deployment (GitHub Actions)
 
 The repository includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) to automatically deploy to Cloud Run when you push to the `main` branch. 
 
