@@ -16,6 +16,15 @@ This application is engineered for enterprise-grade production environments:
 
 ## 🛠️ Prerequisites
 
+> ⚠️ **IMPORTANT: BEFORE YOU COPY/PASTE COMMANDS**
+> Throughout this guide, you will see capitalized placeholder variables (like `YOUR_PROJECT_ID`). **Do not copy and paste these commands blindly.** You must replace these placeholders with your actual values before running the commands.
+> 
+> **Common Placeholders:**
+> * `YOUR_PROJECT_ID`: Your actual Google Cloud Project ID (e.g., `my-company-data-123`).
+> * `YOUR_CLOUD_RUN_URL`: The URL generated after you deploy the app (e.g., `gcp-datanator-abc123xyz-uc.a.run.app`).
+> * `YOUR_GITHUB_REPO`: Your GitHub username and repository name (e.g., `octocat/my-repo`).
+> * `YOUR_GEMINI_API_KEY`, `YOUR_GOOGLE_CLIENT_ID`, etc.: Your actual secret values.
+
 1.  **Google Cloud Project**: A GCP project with billing enabled.
 2.  **gcloud CLI**: Installed and authenticated (`gcloud auth login`).
 3.  **Docker**: Installed and running on your local machine.
@@ -23,7 +32,7 @@ This application is engineered for enterprise-grade production environments:
     ```bash
     gcloud config set project YOUR_PROJECT_ID
     ```
-    *(This ensures all subsequent commands and Cloud Build automatically use the correct project).*
+    *(Replace `YOUR_PROJECT_ID` with your actual project ID. This ensures all subsequent commands and Cloud Build automatically use the correct project).*
 5.  **Required APIs Enabled**:
     ```bash
     gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com cloudscheduler.googleapis.com storage.googleapis.com artifactregistry.googleapis.com
@@ -40,7 +49,7 @@ Cloud Run containers are stateless (their local file system is wiped when the co
 ```bash
 gcloud storage buckets create gs://YOUR_PROJECT_ID-gcp-datanator-data --location=us-central1
 ```
-*(Note: The bucket name must be globally unique).*
+*(Note: Replace `YOUR_PROJECT_ID` with your actual project ID. The bucket name must be globally unique).*
 
 ---
 
@@ -73,6 +82,7 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
     --member="serviceAccount:gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
     --role="roles/storage.objectAdmin"
 ```
+*(Remember to replace `YOUR_PROJECT_ID` in both the project binding and the email address).*
 
 ### 2. Scheduler Service Account
 This account triggers the monthly sync securely.
@@ -87,6 +97,7 @@ gcloud run services add-iam-policy-binding gcp-datanator \
     --member="serviceAccount:gcp-datanator-scheduler-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
     --role="roles/run.invoker"
 ```
+*(Remember to replace `YOUR_PROJECT_ID` in the email address).*
 
 ### 3. Cloud Build Permissions
 To allow Cloud Build to deploy to Cloud Run using the application service account, grant the default Compute Engine service account (used by Cloud Build) the necessary roles:
@@ -104,6 +115,7 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
     --member="serviceAccount:$PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
     --role="roles/run.admin"
 ```
+*(Remember to replace `YOUR_PROJECT_ID` in all three commands above).*
 
 ---
 
@@ -126,21 +138,21 @@ If you don't plan to use the GCS Export feature, you can use a placeholder like 
 6. Click **Create**. You will be given a **Client ID** and a **Client Secret**.
 
 ### Create the Secrets in Secret Manager:
-Now, save these values into Secret Manager:
+Now, save these values into Secret Manager. **Make sure to replace the `YOUR_...` placeholders with your actual secret values**:
 
 ```bash
 # 1. Save your Gemini API Key
-echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
+echo -n "YOUR_ACTUAL_GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
 
 # 2. Save your Google Client ID
-echo -n "YOUR_GOOGLE_CLIENT_ID" | gcloud secrets create GOOGLE_CLIENT_ID --data-file=-
+echo -n "YOUR_ACTUAL_GOOGLE_CLIENT_ID" | gcloud secrets create GOOGLE_CLIENT_ID --data-file=-
 
 # 3. Save your Google Client Secret
-echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets create GOOGLE_CLIENT_SECRET --data-file=-
+echo -n "YOUR_ACTUAL_GOOGLE_CLIENT_SECRET" | gcloud secrets create GOOGLE_CLIENT_SECRET --data-file=-
 ```
 
 ### Grant the Application Access:
-Finally, allow the Cloud Run service account to read these secrets:
+Finally, allow the Cloud Run service account to read these secrets (replace `YOUR_PROJECT_ID`):
 ```bash
 for SECRET in GEMINI_API_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
   gcloud secrets add-iam-policy-binding $SECRET \
@@ -205,7 +217,7 @@ If you prefer to build and deploy manually without using `cloudbuild.yaml`, you 
 gcloud builds submit --tag us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest -f Dockerfile.txt .
 ```
 
-2. **Deploy with all required flags:**
+2. **Deploy with all required flags (Replace `YOUR_PROJECT_ID`):**
 ```bash
 gcloud run deploy gcp-datanator \
   --image=us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest \
@@ -237,7 +249,7 @@ gcloud scheduler jobs create http gcp-datanator-sync \
   --http-method=GET \
   --oidc-service-account-email=gcp-datanator-scheduler-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
 ```
-*(Replace `YOUR_CLOUD_RUN_URL` with the URL provided after the deployment step).*
+*(Replace `YOUR_CLOUD_RUN_URL` with the URL provided after the deployment step, and replace `YOUR_PROJECT_ID` with your project ID).*
 
 > **💡 Why `GET` and `?wait=true`?**
 > Cloud Run throttles CPU to near zero immediately after an HTTP response is sent (unless "CPU always allocated" is enabled). By using `GET` with `?wait=true`, the API endpoint will wait for the background ETL process to complete *before* returning an HTTP 200 response. This ensures Cloud Run keeps the CPU active for the entire duration of the sync.
