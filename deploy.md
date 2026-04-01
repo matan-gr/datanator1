@@ -47,9 +47,10 @@ Cloud Run containers are stateless (their local file system is wiped when the co
 **How it works:** We use Cloud Storage FUSE to mount this bucket directly into the Cloud Run container at `/app/data`. This allows the application to write to the SQLite database (`/app/data/gcp-datanator.db`) and save the parsed feed files (`/app/data/feeds/*.txt`) exactly as if it were writing to a local hard drive, ensuring your data survives container restarts.
 
 ```bash
-gcloud storage buckets create gs://YOUR_PROJECT_ID-gcp-datanator-data --location=us-central1
+PROJECT_ID=$(gcloud config get-value project)
+gcloud storage buckets create gs://${PROJECT_ID}-gcp-datanator-data --location=us-central1
 ```
-*(Note: Replace `YOUR_PROJECT_ID` with your actual project ID. The bucket name must be globally unique).*
+*(The bucket name must be globally unique. This uses your project ID to ensure uniqueness).*
 
 ---
 
@@ -73,16 +74,18 @@ You need two service accounts: one for the application itself and one for the au
 This account runs the Cloud Run service and needs access to the storage bucket.
 
 ```bash
+PROJECT_ID=$(gcloud config get-value project)
+
 # Create the service account
 gcloud iam service-accounts create gcp-datanator-app-sa \
     --display-name="GCP Datanator Application Service Account"
 
 # Grant storage access for the SQLite volume
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-    --member="serviceAccount:gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="serviceAccount:gcp-datanator-app-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/storage.objectAdmin"
 ```
-*(Remember to replace `YOUR_PROJECT_ID` in both the project binding and the email address).*
+*(This automatically uses your active project ID).*
 
 ### 2. Scheduler Service Account
 This account triggers the monthly sync securely.
@@ -90,32 +93,26 @@ This account triggers the monthly sync securely.
 ```bash
 gcloud iam service-accounts create gcp-datanator-scheduler-sa \
     --display-name="GCP Datanator Scheduler Service Account"
-
-# Grant permission to invoke the Cloud Run service
-gcloud run services add-iam-policy-binding gcp-datanator \
-    --region=us-central1 \
-    --member="serviceAccount:gcp-datanator-scheduler-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/run.invoker"
 ```
-*(Remember to replace `YOUR_PROJECT_ID` in the email address).*
+*(Note: We will grant this account permission to invoke Cloud Run **after** the service is deployed in Step 7).*
 
 ### 3. Cloud Build Permissions
 To allow Cloud Build to deploy to Cloud Run using the application service account, grant the default Compute Engine service account (used by Cloud Build) the necessary roles:
 
 ```bash
-PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
+PROJECT_ID=$(gcloud config get-value project)
+PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')
 
 # Allow Cloud Build to act as the App Service Account
-gcloud iam service-accounts add-iam-policy-binding gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com \
-    --member="serviceAccount:$PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+gcloud iam service-accounts add-iam-policy-binding gcp-datanator-app-sa@${PROJECT_ID}.iam.gserviceaccount.com \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
     --role="roles/iam.serviceAccountUser"
 
 # Allow Cloud Build to deploy to Cloud Run
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-    --member="serviceAccount:$PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
     --role="roles/run.admin"
 ```
-*(Remember to replace `YOUR_PROJECT_ID` in all three commands above).*
 
 ---
 
@@ -152,11 +149,13 @@ echo -n "YOUR_ACTUAL_GOOGLE_CLIENT_SECRET" | gcloud secrets create GOOGLE_CLIENT
 ```
 
 ### Grant the Application Access:
-Finally, allow the Cloud Run service account to read these secrets (replace `YOUR_PROJECT_ID`):
+Finally, allow the Cloud Run service account to read these secrets:
 ```bash
+PROJECT_ID=$(gcloud config get-value project)
+
 for SECRET in GEMINI_API_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
   gcloud secrets add-iam-policy-binding $SECRET \
-    --member="serviceAccount:gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+    --member="serviceAccount:gcp-datanator-app-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor"
 done
 ```
@@ -214,18 +213,20 @@ If you prefer to build and deploy manually without using `cloudbuild.yaml`, you 
 
 1. **Build and push the image manually:**
 ```bash
-gcloud builds submit --tag us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest -f Dockerfile.txt .
+PROJECT_ID=$(gcloud config get-value project)
+gcloud builds submit --tag us-central1-docker.pkg.dev/${PROJECT_ID}/datanator-repo/gcp-datanator:latest -f Dockerfile.txt .
 ```
 
-2. **Deploy with all required flags (Replace `YOUR_PROJECT_ID`):**
+2. **Deploy with all required flags:**
 ```bash
+PROJECT_ID=$(gcloud config get-value project)
 gcloud run deploy gcp-datanator \
-  --image=us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest \
+  --image=us-central1-docker.pkg.dev/${PROJECT_ID}/datanator-repo/gcp-datanator:latest \
   --region=us-central1 \
-  --service-account=gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --service-account=gcp-datanator-app-sa@${PROJECT_ID}.iam.gserviceaccount.com \
   --allow-unauthenticated \
   --execution-environment=gen2 \
-  --add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data \
+  --add-volume=name=data-vol,type=cloud-storage,bucket=${PROJECT_ID}-gcp-datanator-data \
   --add-volume-mount=volume=data-vol,mount-path=/app/data \
   --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
   --set-env-vars=NODE_ENV=production \
@@ -240,16 +241,31 @@ gcloud run deploy gcp-datanator \
 
 ## ⏱️ Step 7: Automate the ETL Pipeline (Cloud Scheduler)
 
+Now that the Cloud Run service is deployed, we need to grant the scheduler service account permission to invoke it, and then create the scheduled job.
+
+### 1. Grant Invoker Permission
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+
+gcloud run services add-iam-policy-binding gcp-datanator \
+    --region=us-central1 \
+    --member="serviceAccount:gcp-datanator-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/run.invoker"
+```
+
+### 2. Create the Scheduler Job
 Create a Cloud Scheduler job to trigger the sync automatically every **Sunday, Tuesday, and Friday at 2:00 AM**.
 
 ```bash
+PROJECT_ID=$(gcloud config get-value project)
+
 gcloud scheduler jobs create http gcp-datanator-sync \
   --schedule="0 2 * * 0,2,5" \
   --uri="https://YOUR_CLOUD_RUN_URL/api/v1/sync/monthly?wait=true" \
   --http-method=GET \
-  --oidc-service-account-email=gcp-datanator-scheduler-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+  --oidc-service-account-email=gcp-datanator-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com
 ```
-*(Replace `YOUR_CLOUD_RUN_URL` with the URL provided after the deployment step, and replace `YOUR_PROJECT_ID` with your project ID).*
+*(Replace `YOUR_CLOUD_RUN_URL` with the URL provided after the deployment step).*
 
 > **💡 Why `GET` and `?wait=true`?**
 > Cloud Run throttles CPU to near zero immediately after an HTTP response is sent (unless "CPU always allocated" is enabled). By using `GET` with `?wait=true`, the API endpoint will wait for the background ETL process to complete *before* returning an HTTP 200 response. This ensures Cloud Run keeps the CPU active for the entire duration of the sync.

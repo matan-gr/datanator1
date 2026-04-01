@@ -36,10 +36,16 @@
     "sqlite3": "^5.1.7",
     "tailwind-merge": "^3.5.0",
     "uuid": "^13.0.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@tailwindcss/vite": "^4.1.14",
+    "tailwindcss": "^4.1.14",
+    "vite": "^6.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "~5.8.2",
+    "esbuild": "^0.27.4",
+    "autoprefixer": "^10.4.21"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.14",
     "@types/archiver": "^7.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.25",
@@ -49,12 +55,7 @@
     "@types/sanitize-html": "^2.16.1",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
-    "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.27.4",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "tsx": "^4.21.0"
   }
 }
