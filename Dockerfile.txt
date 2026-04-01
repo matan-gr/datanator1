@@ -4,9 +4,8 @@ WORKDIR /app
 
 # Install dependencies
 RUN apk add --no-cache python3 make g++
-RUN npm install -g npm@latest
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --loglevel=error
 
 # Copy source code and build
 COPY . .
@@ -25,9 +24,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 # Install production dependencies only
-RUN npm install -g npm@latest
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --loglevel=error
 
 # Copy built assets and compiled server code
 COPY --from=builder /app/dist ./dist

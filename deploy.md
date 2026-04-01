@@ -109,24 +109,45 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 
 ## 🔑 Step 4: Environment Variables and Secrets
 
-Store sensitive keys in **Secret Manager** for maximum security. This prevents hardcoding secrets in your Docker image or Cloud Run configuration.
+The application requires specific environment variables to function securely. We store these in **Secret Manager** to prevent hardcoding them.
 
-1.  **Create Secrets**:
-    *(If you don't have Google OAuth credentials yet, you can use "TODO" as a placeholder for the Client ID and Secret. You can update them later in Secret Manager).*
-    ```bash
-    echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
-    echo -n "YOUR_GOOGLE_CLIENT_ID" | gcloud secrets create GOOGLE_CLIENT_ID --data-file=-
-    echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets create GOOGLE_CLIENT_SECRET --data-file=-
-    ```
+### What are these secrets?
+1. **`GEMINI_API_KEY`**: Required for the AI features (like summarizing incidents or generating tags). You can get this from [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. **`GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`**: These are required for the **"Export to GCS"** feature in the dashboard. They allow the application to authenticate users via Google OAuth so they can securely export data to their own Google Cloud Storage buckets.
 
-2.  **Grant the Application Service Account access to the secrets**:
-    ```bash
-    for SECRET in GEMINI_API_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
-      gcloud secrets add-iam-policy-binding $SECRET \
-        --member="serviceAccount:gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-        --role="roles/secretmanager.secretAccessor"
-    done
-    ```
+### How to create the Google OAuth Credentials:
+If you don't plan to use the GCS Export feature, you can use a placeholder like `"TODO"` for these values. However, to fully enable the feature:
+
+1. Go to the **[APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials)** page in your Google Cloud Console.
+2. Click **Create Credentials > OAuth client ID**.
+3. Choose **Web application** as the Application type.
+4. Under **Authorized JavaScript origins**, add your Cloud Run URL (if you know it, otherwise you can add it later after deployment).
+5. Under **Authorized redirect URIs**, add `postmessage` (since this app uses a popup-based OAuth flow).
+6. Click **Create**. You will be given a **Client ID** and a **Client Secret**.
+
+### Create the Secrets in Secret Manager:
+Now, save these values into Secret Manager:
+
+```bash
+# 1. Save your Gemini API Key
+echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
+
+# 2. Save your Google Client ID
+echo -n "YOUR_GOOGLE_CLIENT_ID" | gcloud secrets create GOOGLE_CLIENT_ID --data-file=-
+
+# 3. Save your Google Client Secret
+echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets create GOOGLE_CLIENT_SECRET --data-file=-
+```
+
+### Grant the Application Access:
+Finally, allow the Cloud Run service account to read these secrets:
+```bash
+for SECRET in GEMINI_API_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+  gcloud secrets add-iam-policy-binding $SECRET \
+    --member="serviceAccount:gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+done
+```
 
 ---
 
@@ -223,19 +244,7 @@ gcloud scheduler jobs create http gcp-datanator-sync \
 
 ---
 
-## ⚙️ Step 8: Configure OAuth for GCS Export (Optional)
-
-If you want to use the "Export to GCS" feature in the dashboard:
-
-1.  Go to the **[APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials)** page.
-2.  Click **Create Credentials > OAuth client ID** (Web application).
-3.  Add your Cloud Run URL to **Authorized JavaScript origins**.
-4.  Add `postmessage` to **Authorized redirect URIs**.
-5.  Ensure the Client ID matches the `GOOGLE_CLIENT_ID` secret you set in Secret Manager.
-
----
-
-## 🔒 Step 9: Securing the Application (Optional but Recommended)
+## 🔒 Step 8: Securing the Application (Optional but Recommended)
 
 By default, the `cloudbuild.yaml` deploys the service with `--allow-unauthenticated`, meaning anyone on the internet can access the dashboard. For production, you should secure the application.
 
@@ -249,7 +258,7 @@ This ensures that only authorized users within your Google Workspace or specific
 
 ---
 
-## 🔄 Step 10: Continuous Deployment (GitHub Actions)
+## 🔄 Step 9: Continuous Deployment (GitHub Actions)
 
 The repository includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) to automatically deploy to Cloud Run when you push to the `main` branch. 
 
