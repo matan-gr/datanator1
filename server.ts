@@ -35,7 +35,7 @@ async function startServer() {
       res.on('finish', () => {
         const duration = Date.now() - start;
         // Skip spammy polling endpoints and static assets from cluttering Cloud Logging
-        const isPolling = req.originalUrl.includes('/api/v1/sync-runs') || req.originalUrl.includes('/api/v1/metrics');
+        const isPolling = req.originalUrl.includes('/api/v1/sync-runs') || req.originalUrl.includes('/api/v1/metrics') || req.originalUrl.includes('/api/v1/logs');
         const isStaticAsset = req.originalUrl.startsWith('/src/') || 
                               req.originalUrl.startsWith('/@') || 
                               req.originalUrl.startsWith('/node_modules/') || 
