@@ -5,7 +5,8 @@ import type { DataSource } from './extractor.ts';
 export async function saveLocally(content: string, source: DataSource, runId: string): Promise<string> {
   // In production, we might use a persistent volume or cloud storage.
   // For this environment, we use a local 'data' directory to simulate a data lake.
-  const dataDir = path.join(process.cwd(), 'data', 'feeds');
+  const baseDataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+  const dataDir = path.join(baseDataDir, 'feeds');
   
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });

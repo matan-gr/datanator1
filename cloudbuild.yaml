@@ -38,6 +38,7 @@ steps:
       - '--add-volume-mount=volume=data-vol,mount-path=/app/data'
       - '--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest'
       - '--set-env-vars=NODE_ENV=production'
+      - '--port=3000'
       - '--memory=2Gi'
       - '--cpu=1'
       - '--max-instances=1'

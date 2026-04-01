@@ -6,7 +6,7 @@ import fs from 'fs';
 let db: Database<sqlite3.Database, sqlite3.Statement>;
 
 export async function initDb() {
-  const dataDir = path.join(process.cwd(), 'data');
+  const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
@@ -18,12 +18,26 @@ export async function initDb() {
     driver: sqlite3.Database
   });
 
-  await db.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA busy_timeout = 5000;
-    PRAGMA synchronous = NORMAL;
-    PRAGMA auto_vacuum = INCREMENTAL;
-  `);
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (isProd) {
+    // Cloud Storage FUSE does not support WAL mode (which requires mmap).
+    // Use DELETE journal mode and FULL synchronous to prevent corruption.
+    await db.exec(`
+      PRAGMA journal_mode = DELETE;
+      PRAGMA synchronous = FULL;
+      PRAGMA busy_timeout = 5000;
+      PRAGMA auto_vacuum = INCREMENTAL;
+    `);
+  } else {
+    // Local development can safely use WAL mode for better performance
+    await db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
+      PRAGMA busy_timeout = 5000;
+      PRAGMA auto_vacuum = INCREMENTAL;
+    `);
+  }
 
   // Create migrations table
   await db.exec(`

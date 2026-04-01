@@ -64,7 +64,7 @@ apiRouter.get('/readme', async (req, res) => {
 // Gemini Content endpoint (to be used by frontend for generation)
 apiRouter.get('/gemini/content', async (req, res) => {
   try {
-    const dataDir = path.join(process.cwd(), 'data', 'feeds');
+    const dataDir = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds');
     if (!fs.existsSync(dataDir)) {
       return res.json({ success: true, content: "" });
     }
@@ -270,10 +270,10 @@ apiRouter.get('/logs', async (req, res) => {
 apiRouter.get('/system/status', async (req, res) => {
   try {
     const db = getDb();
-    const dbPath = path.join(process.cwd(), 'data', 'gcp-datanator.db');
+    const dbPath = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'gcp-datanator.db');
     const dbStats = fs.existsSync(dbPath) ? fs.statSync(dbPath) : { size: 0 };
     
-    const dataDir = path.join(process.cwd(), 'data', 'feeds');
+    const dataDir = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds');
     let totalFileSize = 0;
     let fileCount = 0;
     if (fs.existsSync(dataDir)) {
@@ -345,7 +345,7 @@ apiRouter.post('/system/purge', async (req, res) => {
     }
 
     // Delete files
-    const dataDir = path.join(process.cwd(), 'data', 'feeds');
+    const dataDir = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds');
     if (fs.existsSync(dataDir)) {
       const files = fs.readdirSync(dataDir);
       for (const file of files) {
@@ -366,7 +366,7 @@ apiRouter.post('/system/purge', async (req, res) => {
 // List output files
 apiRouter.get('/files', async (req, res) => {
   try {
-    const dataDir = path.join(process.cwd(), 'data', 'feeds');
+    const dataDir = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds');
     if (!fs.existsSync(dataDir)) {
       return res.json({ success: true, data: [] });
     }
@@ -396,7 +396,7 @@ apiRouter.get('/files/:filename', async (req, res) => {
     if (filename.includes('..') || filename.includes('/')) {
       return res.status(400).json({ success: false, error: 'Invalid filename' });
     }
-    const filePath = path.join(process.cwd(), 'data', 'feeds', filename);
+    const filePath = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds', filename);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, error: 'File not found' });
     }
@@ -415,7 +415,7 @@ apiRouter.get('/files/:filename', async (req, res) => {
 // Download all files as ZIP
 apiRouter.get('/files-download-all', async (req, res) => {
   try {
-    const dataDir = path.join(process.cwd(), 'data', 'feeds');
+    const dataDir = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds');
     if (!fs.existsSync(dataDir)) {
       return res.status(404).json({ success: false, error: 'No files to download' });
     }
@@ -446,7 +446,7 @@ apiRouter.post('/files-export-gcs', validate(GCSExportSchema), async (req, res) 
   const { projectId, bucketName, authCode, accessToken } = req.body;
   
   try {
-    const dataDir = path.join(process.cwd(), 'data', 'feeds');
+    const dataDir = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds');
     if (!fs.existsSync(dataDir)) {
       return res.status(404).json({ success: false, error: 'No files to export' });
     }

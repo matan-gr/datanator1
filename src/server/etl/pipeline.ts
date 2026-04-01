@@ -7,6 +7,44 @@ import { saveLocally } from './loader.ts';
 import fs from 'fs';
 import path from 'path';
 
+async function logAppEvent(db: any, level: 'INFO' | 'WARN' | 'ERROR' | 'NETWORK', message: string, syncRunId: string, metadata?: string) {
+  // 1. Output to console for GCP Cloud Logging
+  const parsedMeta = metadata ? JSON.parse(metadata) : undefined;
+  if (level === 'ERROR') {
+    console.error(`[${syncRunId}] ${message}`, parsedMeta || '');
+  } else if (level === 'WARN') {
+    console.warn(`[${syncRunId}] ${message}`, parsedMeta || '');
+  } else {
+    console.log(`[${level}] [${syncRunId}] ${message}`, parsedMeta || '');
+  }
+
+  // 2. Insert into SQLite for the Admin UI
+  const logId = uuidv4();
+  if (metadata) {
+    await db.run(
+      'INSERT INTO AppLogs (id, level, message, syncRunId, metadata) VALUES (?, ?, ?, ?, ?)',
+      [logId, level, message, syncRunId, metadata]
+    );
+  } else {
+    await db.run(
+      'INSERT INTO AppLogs (id, level, message, syncRunId) VALUES (?, ?, ?, ?)',
+      [logId, level, message, syncRunId]
+    );
+  }
+
+  // 3. Enforce hard cap of 500 logs to prevent SQLite bloat
+  try {
+    await db.run(`
+      DELETE FROM AppLogs 
+      WHERE id NOT IN (
+        SELECT id FROM AppLogs ORDER BY timestamp DESC LIMIT 500
+      )
+    `);
+  } catch (e) {
+    console.error('Failed to enforce AppLogs cap:', e);
+  }
+}
+
 export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: string, force: boolean = false): Promise<string> {
   const db = getDb();
   
@@ -46,15 +84,12 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
           const { items: rawItems, status, statusText, url, duration } = await extractFeed(source);
           
           // Log HTTP response details
-          await db.run(
-            'INSERT INTO AppLogs (id, level, message, syncRunId, metadata) VALUES (?, ?, ?, ?, ?)',
-            [
-              uuidv4(), 
-              'NETWORK', 
-              `Source ${source.name}: HTTP ${status} ${statusText} from ${url}`, 
-              runId,
-              JSON.stringify({ status, statusText, url, method: 'GET', duration })
-            ]
+          await logAppEvent(
+            db,
+            'NETWORK',
+            `Source ${source.name}: HTTP ${status} ${statusText} from ${url}`,
+            runId,
+            JSON.stringify({ status, statusText, url, method: 'GET', duration })
           );
 
           // 1.5 Deduplicate against previously parsed items
@@ -78,9 +113,11 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
           // Log exact deduplication metrics
           const totalFetched = rawItems.length;
           const duplicates = totalFetched - newRawItems.length;
-          await db.run(
-            'INSERT INTO AppLogs (id, level, message, syncRunId) VALUES (?, ?, ?, ?)',
-            [uuidv4(), 'INFO', `Source ${source.name}: Fetched ${totalFetched} items. Skipped ${duplicates} duplicates. Processing ${newRawItems.length} new items.`, runId]
+          await logAppEvent(
+            db,
+            'INFO',
+            `Source ${source.name}: Fetched ${totalFetched} items. Skipped ${duplicates} duplicates. Processing ${newRawItems.length} new items.`,
+            runId
           );
           
           // 2. Transform
@@ -122,7 +159,13 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
               await saveLocally(documentContent, source, runId);
               filesCount = 1;
             } catch (fileError) {
-              console.error(`Failed to touch file for ${source.name}:`, fileError);
+              await logAppEvent(
+                db,
+                'WARN',
+                `Failed to touch file for ${source.name}`,
+                runId,
+                JSON.stringify({ error: String(fileError) })
+              );
               // Non-fatal, continue
             }
           }
@@ -139,15 +182,15 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
           `, [source.id, source.name, source.url, itemsCount]);
           
           // Log Success
-          await db.run(
-            'INSERT INTO AppLogs (id, level, message, syncRunId) VALUES (?, ?, ?, ?)',
-            [uuidv4(), 'INFO', `Successfully synced ${source.name} (${itemsCount} items)`, runId]
+          await logAppEvent(
+            db,
+            'INFO',
+            `Successfully synced ${source.name} (${itemsCount} items)`,
+            runId
           );
           
           results.push({ success: true, items: itemsCount, files: filesCount });
         } catch (error) {
-          console.error(`Error syncing source ${source.name}:`, error);
-          
           // Update SourceMetrics for failure
           await db.run(`
             INSERT INTO SourceMetrics (id, sourceName, sourceUrl, lastSyncTimestamp, healthStatus, lastErrorMessage)
@@ -160,9 +203,12 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
           
           // Log Error
           const errorStack = error instanceof Error ? error.stack : undefined;
-          await db.run(
-            'INSERT INTO AppLogs (id, level, message, syncRunId, metadata) VALUES (?, ?, ?, ?, ?)',
-            [uuidv4(), 'ERROR', `Failed to sync ${source.name}`, runId, JSON.stringify({ error: String(error), stack: errorStack })]
+          await logAppEvent(
+            db,
+            'ERROR',
+            `Failed to sync ${source.name}`,
+            runId,
+            JSON.stringify({ error: String(error), stack: errorStack })
           );
           
           results.push({ success: false, items: 0, files: 0, error: `${source.name}: ${String(error)}` });
@@ -203,24 +249,34 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
           await db.exec('PRAGMA incremental_vacuum');
           await db.exec('PRAGMA optimize');
           
-          await db.run(
-            'INSERT INTO AppLogs (id, level, message, syncRunId) VALUES (?, ?, ?, ?)',
-            [uuidv4(), 'INFO', `Cleanup completed. Removed DB records older than ${retentionDays} days. Vacuumed and optimized DB.`, runId]
+          await logAppEvent(
+            db,
+            'INFO',
+            `Cleanup completed. Removed DB records older than ${retentionDays} days. Vacuumed and optimized DB.`,
+            runId
           );
           console.log(`Cleanup completed. Removed data older than ${retentionDays} days (${cleanupDateStr}).`);
         }
       } catch (cleanupError) {
-        console.error('Failed to perform automatic cleanup:', cleanupError);
+        await logAppEvent(
+          db,
+          'ERROR',
+          'Failed to perform automatic cleanup',
+          runId,
+          JSON.stringify({ error: String(cleanupError) })
+        );
       }
     } catch (fatalError) {
-      console.error(`Fatal error in background sync process ${runId}:`, fatalError);
       await db.run(
         'UPDATE SyncRuns SET status = ?, errorSummary = ? WHERE id = ?',
         ['FAILED', `Fatal error: ${fatalError instanceof Error ? fatalError.message : String(fatalError)}`, runId]
       );
-      await db.run(
-        'INSERT INTO AppLogs (id, level, message, syncRunId, metadata) VALUES (?, ?, ?, ?, ?)',
-        [uuidv4(), 'ERROR', `Fatal pipeline error`, runId, JSON.stringify({ error: String(fatalError) })]
+      await logAppEvent(
+        db,
+        'ERROR',
+        `Fatal pipeline error`,
+        runId,
+        JSON.stringify({ error: String(fatalError) })
       );
     }
   };

@@ -142,7 +142,7 @@
 
 /* Navigation */
 .nav-tabs-list {
-  @apply bg-[#f6f8fa] dark:bg-[#010409] p-0 rounded-none border-b border-border w-full flex justify-start gap-2 px-6 pt-3 overflow-x-auto;
+  @apply bg-transparent p-0 rounded-none w-full flex justify-start gap-2 px-6 pt-3 overflow-x-auto;
 }
 
 [data-slot="tabs-trigger"] {
@@ -218,6 +218,22 @@
 }
 
 /* Buttons */
+.github-btn {
+  @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border shadow-sm px-3 py-1 h-8;
+}
+
+.github-btn-primary {
+  @apply bg-[#238636] text-white border-transparent hover:bg-[#2ea043] dark:bg-[#238636] dark:hover:bg-[#2ea043];
+}
+
+.github-btn-secondary {
+  @apply bg-[#f6f8fa] text-[#24292f] border-[#d0d7de] hover:bg-[#f3f4f6] dark:bg-[#21262d] dark:text-[#c9d1d9] dark:border-[#30363d] dark:hover:bg-[#30363d];
+}
+
+.github-search {
+  @apply bg-transparent border border-[#d0d7de] dark:border-[#30363d] text-sm rounded-md px-3 py-1 w-64 focus:outline-none focus:ring-2 focus:ring-[#0969da] dark:focus:ring-[#2f81f7] transition-all;
+}
+
 /* Gemini Markdown Styling */
 .markdown-body {
   @apply text-[14px] leading-[1.6] text-foreground max-w-[1012px] mx-auto;
@@ -272,11 +288,15 @@
 }
 
 .markdown-body code {
-  @apply bg-[#afb8c1]/20 dark:bg-[#6e7681]/40 px-1 py-0.5 rounded-md font-mono text-[85%];
+  @apply bg-[#afb8c1]/20 dark:bg-[#6e7681]/40 px-[0.4em] py-[0.2em] m-0 rounded-md font-mono text-[85%];
 }
 
 .markdown-body pre {
-  @apply bg-[#f6f8fa] dark:bg-[#161b22] rounded-md p-4 mb-4 overflow-x-auto border border-border;
+  @apply bg-[#f6f8fa] dark:bg-[#161b22] rounded-md p-4 mb-4 overflow-x-auto border border-border text-[85%] leading-[1.45];
+}
+
+.markdown-body pre code {
+  @apply bg-transparent p-0 m-0 rounded-none text-[100%] border-0;
 }
 
 .markdown-body table {

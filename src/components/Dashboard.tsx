@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { toast } from 'sonner';
-import { Play, Database, RefreshCw, AlertCircle, CheckCircle2, Clock, ExternalLink, Activity, Search, ChevronLeft, ChevronRight, FileText, Download, Settings, ShieldCheck, Server, Terminal, ListFilter, Sparkles, Moon, Sun, BookOpen, Eye, X, Cloud, AlertTriangle } from 'lucide-react';
+import { Play, Database, RefreshCw, AlertCircle, CheckCircle2, Clock, ExternalLink, Activity, Search, ChevronLeft, ChevronRight, FileText, Download, Settings, ShieldCheck, Server, Terminal, ListFilter, Sparkles, Moon, Sun, BookOpen, Eye, X, Cloud, AlertTriangle, XCircle, Pencil, Code, HardDrive } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -99,46 +99,6 @@ export default function Dashboard() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [purging, setPurging] = useState(false);
   const [systemStatus, setSystemStatus] = useState<any>(null);
-
-  // GCS Export State
-  const [isGCSDialogOpen, setIsGCSDialogOpen] = useState(false);
-  const [gcsProjectId, setGcsProjectId] = useState('');
-  const [gcsBucketName, setGcsBucketName] = useState('');
-  const [gcsAuthCode, setGcsAuthCode] = useState('');
-  const [isExporting, setIsExporting] = useState(false);
-
-  const handleGCSExport = async () => {
-    if (!gcsProjectId || !gcsBucketName || !gcsAuthCode) {
-      toast.error('Project ID, Bucket Name, and Auth Code are required');
-      return;
-    }
-
-    setIsExporting(true);
-    try {
-      const result = await fetchJson('/api/v1/files-export-gcs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: gcsProjectId,
-          bucketName: gcsBucketName,
-          authCode: gcsAuthCode
-        })
-      });
-      if (result.success) {
-        toast.success(result.message);
-        setIsGCSDialogOpen(false);
-        // Reset form
-        setGcsAuthCode('');
-      } else {
-        toast.error(result.error || 'Export failed');
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to export to GCS');
-      console.error(error);
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   const handleDownloadAll = () => {
     window.open('/api/v1/files-download-all', '_blank');
@@ -596,25 +556,49 @@ export default function Dashboard() {
     }
   };
 
+  const getStatusChip = (status: string) => {
+    switch (status) {
+      case 'SUCCESS':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20"><CheckCircle2 className="w-3 h-3" /> Pass</span>;
+      case 'RUNNING':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"><RefreshCw className="w-3 h-3 animate-spin" /> Running</span>;
+      case 'PARTIAL_SUCCESS':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20"><AlertTriangle className="w-3 h-3" /> Partial</span>;
+      case 'FAILED':
+      case 'ERROR':
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"><XCircle className="w-3 h-3" /> Fail</span>;
+      default:
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground border border-border"><Activity className="w-3 h-3" /> {status}</span>;
+    }
+  };
+
   return (
     <div className="dashboard-container">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col min-h-screen">
         <header className="dashboard-header">
           <div className="max-w-[1920px] mx-auto w-full flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <motion.div 
                 whileHover={{ scale: 1.05 }}
-                className="dashboard-logo-box"
+                whileTap={{ scale: 0.95 }}
+                className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-[#1a73e8] to-[#0d47a1] shadow-lg shadow-blue-900/20 border border-blue-400/30 overflow-hidden"
               >
-                <Database className="h-5 w-5" />
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMDUiLz4KPC9zdmc+')] opacity-50" />
+                <div className="absolute top-0 right-0 w-6 h-6 bg-white/20 rounded-bl-full blur-[2px]" />
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white relative z-10 drop-shadow-md">
+                  <path d="M12 3L2 8L12 13L22 8L12 3Z" fill="currentColor" fillOpacity="0.3"/>
+                  <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2 16L12 21L22 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </motion.div>
-              <div className="flex items-center gap-2">
-                <span className="dashboard-title">GCP Datanator</span>
-                <span className="dashboard-version">v0.9.0</span>
+              <div className="flex flex-col justify-center">
+                <span className="text-[15px] font-bold text-white tracking-tight leading-none mb-0.5">GCP Datanator</span>
+                <span className="text-[10px] text-blue-200/80 font-medium tracking-[0.15em] uppercase leading-none">Intelligence</span>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
+              <span className="dashboard-version hidden sm:inline-block">v0.9.0</span>
               <Button
                 variant="ghost"
                 size="icon"
@@ -624,35 +608,36 @@ export default function Dashboard() {
                 <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                 <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
               </Button>
-
-              <Button 
-                onClick={() => triggerSync(undefined, true)} 
-                disabled={syncing}
-                className="h-8 px-3 text-xs flex items-center gap-2"
-              >
-                {syncing ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                {syncing ? 'Syncing...' : 'Sync Now'}
-              </Button>
             </div>
           </div>
         </header>
 
         {/* Repository Header Style */}
-        <div className="bg-[#f6f8fa] dark:bg-[#010409] pt-6 pb-0">
+        <div className="bg-[#f6f8fa] dark:bg-[#0d1117] pt-6 pb-0 border-b border-border">
           <div className="content-container py-0">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-2 text-xl">
                 <Database className="w-5 h-5 text-muted-foreground" />
                 <span className="text-primary hover:underline cursor-pointer">google-cloud</span>
                 <span className="text-muted-foreground">/</span>
-                <span className="font-semibold text-primary hover:underline cursor-pointer">gcp-datanator-core</span>
+                <span className="font-semibold text-primary hover:underline cursor-pointer">gcp-datanator</span>
                 <Badge variant="outline" className="ml-2 rounded-full text-[12px] font-medium px-2 py-0 border-border text-muted-foreground">Public</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  onClick={() => triggerSync(undefined, true)} 
+                  disabled={syncing}
+                  className="github-btn github-btn-primary"
+                >
+                  {syncing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                  {syncing ? 'Syncing...' : 'Sync Now'}
+                </Button>
               </div>
             </div>
 
-            <TabsList className="nav-tabs-list">
+            <TabsList className="nav-tabs-list bg-transparent dark:bg-transparent border-none">
               <TabsTrigger value="overview">
-                <Activity className="w-4 h-4 mr-2" />
+                <BookOpen className="w-4 h-4 mr-2" />
                 Overview
               </TabsTrigger>
               <TabsTrigger value="gemini">
@@ -660,16 +645,20 @@ export default function Dashboard() {
                 Intelligence
               </TabsTrigger>
               <TabsTrigger value="sources">
-                <Database className="w-4 h-4 mr-2" />
-                Sources
+                <Activity className="w-4 h-4 mr-2" />
+                Data Sources
               </TabsTrigger>
               <TabsTrigger value="files">
                 <FileText className="w-4 h-4 mr-2" />
-                Files
+                Artifacts
               </TabsTrigger>
               <TabsTrigger value="debug">
-                <Terminal className="w-4 h-4 mr-2" />
-                Logs
+                <ShieldCheck className="w-4 h-4 mr-2" />
+                System Logs
+              </TabsTrigger>
+              <TabsTrigger value="network">
+                <Activity className="w-4 h-4 mr-2" />
+                Network Telemetry
               </TabsTrigger>
               <TabsTrigger value="settings">
                 <Settings className="w-4 h-4 mr-2" />
@@ -693,61 +682,71 @@ export default function Dashboard() {
                     {/* Main Content: File List Style */}
                     <div className="content-github space-y-6">
                       <div className="github-card">
-                        <div className="github-card-header">
+                        <div className="github-card-header bg-[#f6f8fa] dark:bg-[#161b22] flex items-center justify-between py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <Database className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm font-semibold">Recent Sync Cycles</span>
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Database className="w-3 h-3 text-primary" />
+                            </div>
+                            <span className="text-sm font-semibold hover:text-primary cursor-pointer hover:underline">system</span>
+                            <span className="text-sm text-muted-foreground ml-1 truncate max-w-[200px] sm:max-w-md">Automated sync cycle completed</span>
+                            {runs.length > 0 && (
+                              <div className="ml-2 scale-90 origin-left">
+                                {getStatusChip(runs[0].status)}
+                              </div>
+                            )}
                           </div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {runs.length} runs recorded
+                          <div className="text-xs text-muted-foreground font-mono flex items-center gap-1.5 shrink-0">
+                            <Clock className="w-3 h-3" />
+                            {runs.length > 0 ? new Date(runs[0].timestamp).toLocaleDateString() : 'Never'}
                           </div>
                         </div>
                         <div className="overflow-hidden">
                           <table className="github-table">
-                            <thead>
-                              <tr>
-                                <th>Timestamp</th>
-                                <th>Status</th>
-                                <th>Trigger</th>
-                                <th className="text-right">Items</th>
-                                <th className="text-right">Actions</th>
-                              </tr>
-                            </thead>
                             <tbody>
                               {runs.slice(0, 8).map((run) => (
                                 <tr key={run.id} onClick={() => openRunDetails(run)} className="cursor-pointer group">
-                                  <td className="font-mono text-[12px] text-primary group-hover:underline">
-                                    {new Date(run.timestamp).toLocaleString()}
+                                  <td className="w-8 pl-4 pr-1">
+                                    <FileText className="w-4 h-4 text-muted-foreground" />
                                   </td>
-                                  <td>{getStatusBadge(run.status)}</td>
-                                  <td>
-                                    <span className="text-[12px] text-muted-foreground">{run.triggerType}</span>
+                                  <td className="font-mono text-[13px] text-foreground group-hover:text-primary group-hover:underline py-2.5">
+                                    {run.triggerType.toLowerCase()}_sync_{run.id.substring(0, 7)}.log
                                   </td>
-                                  <td className="text-right font-mono text-[12px]">{run.totalItemsParsed}</td>
-                                  <td className="text-right">
-                                    <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground group-hover:text-primary transition-colors" />
+                                  <td className="text-[13px] text-muted-foreground truncate max-w-[150px] sm:max-w-[300px] py-2.5">
+                                    Processed {run.totalItemsParsed} items
+                                  </td>
+                                  <td className="py-2.5 px-2">
+                                    {getStatusChip(run.status)}
+                                  </td>
+                                  <td className="text-right font-mono text-[12px] text-muted-foreground py-2.5 pr-4">
+                                    {new Date(run.timestamp).toLocaleDateString()}
                                   </td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
-                        <div className="px-4 py-3 bg-muted border-t border-border text-center">
-                          <Button variant="ghost" size="sm" onClick={() => setActiveTab('debug')} className="text-xs text-primary font-semibold hover:bg-primary/10">
-                            View all system logs
-                          </Button>
-                        </div>
                       </div>
 
                       {/* README Style Section */}
                       <div className="github-card">
-                        <div className="github-card-header">
+                        <div className="px-4 py-3 bg-card border-b border-border flex items-center justify-between sticky top-0 z-10">
                           <div className="flex items-center gap-2">
-                            <BookOpen className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm font-semibold uppercase tracking-wider">README.md</span>
+                            <ListFilter className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm font-semibold hover:text-primary cursor-pointer">README.md</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="h-7 text-xs font-semibold px-3">
+                              Raw
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                              <Code className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                              <Pencil className="w-4 h-4" />
+                            </Button>
                           </div>
                         </div>
-                        <div className="p-8 markdown-body">
+                        <div className="p-8 markdown-body bg-card rounded-b-md">
                           <ReactMarkdown>{readmeContent || 'Loading documentation...'}</ReactMarkdown>
                         </div>
                       </div>
@@ -760,18 +759,22 @@ export default function Dashboard() {
                         <p className="text-sm text-muted-foreground leading-relaxed">
                           Self-hosted technical intelligence aggregator for SRE and Engineering teams. Built for high-density data synthesis.
                         </p>
-                        <div className="flex flex-col gap-3 pt-2">
-                          <div className="flex items-center gap-2 text-sm">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary cursor-pointer mt-2">
+                          <BookOpen className="w-4 h-4" />
+                          <span className="hover:underline">Read the documentation</span>
+                        </div>
+                        <div className="flex flex-col gap-3 pt-4">
+                          <div className="flex items-center gap-2 text-sm hover:text-primary cursor-pointer">
                             <Activity className="w-4 h-4 text-muted-foreground" />
-                            <span>{analytics?.successRate || 0}% success rate</span>
+                            <span className="font-semibold">{analytics?.successRate || 0}%</span> <span className="text-muted-foreground">success rate</span>
                           </div>
-                          <div className="flex items-center gap-2 text-sm">
+                          <div className="flex items-center gap-2 text-sm hover:text-primary cursor-pointer">
                             <Database className="w-4 h-4 text-muted-foreground" />
-                            <span>{analytics?.totalItems ? (analytics.totalItems / 1000).toFixed(1) + 'k' : '0'} items parsed</span>
+                            <span className="font-semibold">{analytics?.totalItems ? (analytics.totalItems / 1000).toFixed(1) + 'k' : '0'}</span> <span className="text-muted-foreground">items parsed</span>
                           </div>
-                          <div className="flex items-center gap-2 text-sm">
+                          <div className="flex items-center gap-2 text-sm hover:text-primary cursor-pointer">
                             <Clock className="w-4 h-4 text-muted-foreground" />
-                            <span>Last sync: {runs[0] ? new Date(runs[0].timestamp).toLocaleTimeString() : 'Never'}</span>
+                            <span className="text-muted-foreground">Last sync:</span> <span className="font-semibold">{runs[0] ? new Date(runs[0].timestamp).toLocaleTimeString() : 'Never'}</span>
                           </div>
                         </div>
                       </div>
@@ -779,33 +782,82 @@ export default function Dashboard() {
                       <Separator className="bg-border" />
 
                       <div className="space-y-4">
-                        <h3 className="text-sm font-semibold">Source Health</h3>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Releases</h3>
+                          <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">1</Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm cursor-pointer group">
+                          <ExternalLink className="w-4 h-4 text-success" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold group-hover:text-primary group-hover:underline">v1.0.0</span>
+                            <span className="text-xs text-muted-foreground">Latest</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Separator className="bg-border" />
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Packages</h3>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          No packages published
+                        </div>
+                      </div>
+
+                      <Separator className="bg-border" />
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Source Health</h3>
+                          <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">{metrics.length}</Badge>
+                        </div>
                         <div className="space-y-3">
                           {metrics.slice(0, 5).map(m => (
                             <div key={m.id} className="flex items-center justify-between group cursor-pointer" onClick={() => setActiveTab('sources')}>
                               <div className="flex items-center gap-2 overflow-hidden">
                                 <div className={`w-2 h-2 rounded-full shrink-0 ${m.healthStatus === 'HEALTHY' ? 'bg-success shadow-[0_0_8px_rgba(63,185,80,0.4)]' : 'bg-error shadow-[0_0_8px_rgba(248,81,73,0.4)]'}`} />
-                                <span className="text-xs font-medium truncate group-hover:text-primary transition-colors">{m.sourceName}</span>
+                                <span className="text-xs font-medium truncate group-hover:text-primary group-hover:underline transition-colors">{m.sourceName}</span>
                               </div>
                               <span className="text-[10px] font-mono text-muted-foreground">{m.itemsParsedLastSync}</span>
                             </div>
                           ))}
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => setActiveTab('sources')} className="w-full text-xs text-primary font-semibold justify-start p-0 h-auto hover:bg-transparent hover:underline">
-                          View all sources
-                        </Button>
+                        {metrics.length > 5 && (
+                          <Button variant="ghost" size="sm" onClick={() => setActiveTab('sources')} className="w-full text-xs text-primary font-semibold justify-start p-0 h-auto hover:bg-transparent hover:underline">
+                            + {metrics.length - 5} more sources
+                          </Button>
+                        )}
                       </div>
 
                       <Separator className="bg-border" />
 
                       <div className="space-y-4">
-                        <h3 className="text-sm font-semibold">Deployment</h3>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <div className="w-2 h-2 rounded-full bg-success" />
-                          <span>Cloud Run (Production)</span>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Environments</h3>
+                          <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">1</Badge>
                         </div>
-                        <div className="text-[10px] font-mono text-muted-foreground opacity-60">
-                          Region: europe-west2
+                        <div className="flex items-center gap-2 text-sm cursor-pointer group">
+                          <div className="w-2 h-2 rounded-full bg-success" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold group-hover:text-primary group-hover:underline">Cloud Run (Production)</span>
+                            <span className="text-xs text-muted-foreground">europe-west2</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Separator className="bg-border" />
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Contributors</h3>
+                          <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">1</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs border border-border">
+                            MG
+                          </div>
                         </div>
                       </div>
 
@@ -821,17 +873,17 @@ export default function Dashboard() {
                         <div className="flex flex-wrap gap-x-4 gap-y-2">
                           <div className="flex items-center gap-1.5 text-xs">
                             <div className="w-2 h-2 rounded-full bg-blue-500" />
-                            <span className="font-semibold">TypeScript</span>
+                            <span className="font-semibold hover:text-primary cursor-pointer hover:underline">TypeScript</span>
                             <span className="text-muted-foreground">70.2%</span>
                           </div>
                           <div className="flex items-center gap-1.5 text-xs">
                             <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                            <span className="font-semibold">JavaScript</span>
+                            <span className="font-semibold hover:text-primary cursor-pointer hover:underline">JavaScript</span>
                             <span className="text-muted-foreground">19.8%</span>
                           </div>
                           <div className="flex items-center gap-1.5 text-xs">
                             <div className="w-2 h-2 rounded-full bg-purple-500" />
-                            <span className="font-semibold">CSS</span>
+                            <span className="font-semibold hover:text-primary cursor-pointer hover:underline">CSS</span>
                             <span className="text-muted-foreground">10.0%</span>
                           </div>
                         </div>
@@ -849,13 +901,11 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
-                          variant="ghost"
-                          size="sm"
                           onClick={fetchGeminiBrief}
                           disabled={geminiLoading}
-                          className="h-7 text-xs font-semibold hover:bg-primary/10"
+                          className="github-btn github-btn-secondary"
                         >
-                          {geminiLoading ? <RefreshCw className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                          {geminiLoading ? <RefreshCw className="w-3 h-3 animate-spin mr-1.5" /> : <RefreshCw className="w-3 h-3 mr-1.5" />}
                           Regenerate
                         </Button>
                       </div>
@@ -871,7 +921,7 @@ export default function Dashboard() {
                           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4 opacity-50" />
                           <h3 className="text-lg font-semibold mb-2">Synthesis Failed</h3>
                           <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">{geminiError}</p>
-                          <Button onClick={fetchGeminiBrief} variant="outline" className="h-9 text-xs font-semibold">
+                          <Button onClick={fetchGeminiBrief} className="github-btn github-btn-secondary">
                             Retry Synthesis
                           </Button>
                         </div>
@@ -888,7 +938,7 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto">
                             Initialize a sync cycle to provide Gemini with fresh data for analysis and synthesis.
                           </p>
-                          <Button onClick={fetchGeminiBrief} className="px-8">
+                          <Button onClick={fetchGeminiBrief} className="github-btn github-btn-primary px-8">
                             Generate Now
                           </Button>
                         </div>
@@ -908,8 +958,8 @@ export default function Dashboard() {
                         <div className="text-[12px] text-muted-foreground mr-2">
                           <span className="font-semibold text-foreground">{metrics.length}</span> sources
                         </div>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs font-semibold hover:bg-primary/10" onClick={() => fetchData()}>
-                          <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                        <Button onClick={() => fetchData()} className="github-btn github-btn-secondary">
+                          <RefreshCw className={`w-3 h-3 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
                           Refresh
                         </Button>
                       </div>
@@ -946,8 +996,8 @@ export default function Dashboard() {
                               <td className="text-right font-mono text-[12px]">{m.itemsParsedLastSync} items</td>
                               <td className="text-right">
                                 <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button variant="ghost" size="sm" onClick={() => testConnection(m.id)} className="h-7 text-xs text-primary font-semibold hover:bg-primary/10">Test</Button>
-                                  <Button variant="ghost" size="sm" onClick={() => triggerSync(m.id, true)} className="h-7 text-xs text-primary font-semibold hover:bg-primary/10">Sync</Button>
+                                  <Button onClick={() => testConnection(m.id)} className="github-btn github-btn-secondary">Test</Button>
+                                  <Button onClick={() => triggerSync(m.id, true)} className="github-btn github-btn-secondary">Sync</Button>
                                 </div>
                               </td>
                             </tr>
@@ -964,7 +1014,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4" />
                         <div className="flex items-center gap-1 text-sm">
-                          <span className="text-primary hover:underline cursor-pointer font-semibold">gcp-datanator-core</span>
+                          <span className="text-primary hover:underline cursor-pointer font-semibold">gcp-datanator</span>
                           <span className="text-muted-foreground">/</span>
                           <span className="font-semibold">output</span>
                         </div>
@@ -973,16 +1023,12 @@ export default function Dashboard() {
                         <div className="text-[12px] text-muted-foreground mr-4">
                           <span className="font-semibold text-foreground">{files.length}</span> files
                         </div>
-                        <Button variant="outline" size="sm" className="h-7 text-xs font-semibold" onClick={handleDownloadAll} disabled={files.length === 0}>
-                          <Download className="w-3 h-3 mr-1" />
+                        <Button onClick={handleDownloadAll} disabled={files.length === 0} className="github-btn github-btn-secondary">
+                          <Download className="w-3 h-3 mr-1.5" />
                           Download All
                         </Button>
-                        <Button variant="outline" size="sm" className="h-7 text-xs font-semibold" onClick={() => setIsGCSDialogOpen(true)} disabled={files.length === 0}>
-                          <Cloud className="w-3 h-3 mr-1" />
-                          Export to GCS
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs font-semibold" onClick={() => fetchData()}>
-                          <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                        <Button onClick={() => fetchData()} className="github-btn github-btn-secondary">
+                          <RefreshCw className={`w-3 h-3 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
                           Refresh
                         </Button>
                       </div>
@@ -1003,12 +1049,12 @@ export default function Dashboard() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="outline" size="sm" className="h-7 text-[11px] font-semibold" onClick={() => window.open(`/api/v1/files/${file.name}`, '_blank')}>
-                                <Eye className="w-3 h-3 mr-1" />
+                              <Button onClick={() => window.open(`/api/v1/files/${file.name}`, '_blank')} className="github-btn github-btn-secondary h-7 text-[11px]">
+                                <Eye className="w-3 h-3 mr-1.5" />
                                 View
                               </Button>
-                              <Button variant="outline" size="sm" className="h-7 text-[11px] font-semibold" onClick={() => window.open(`/api/v1/files/${file.name}?download=1`, '_blank')}>
-                                <Download className="w-3 h-3 mr-1" />
+                              <Button onClick={() => window.open(`/api/v1/files/${file.name}?download=1`, '_blank')} className="github-btn github-btn-secondary h-7 text-[11px]">
+                                <Download className="w-3 h-3 mr-1.5" />
                                 Download
                               </Button>
                             </div>
@@ -1043,10 +1089,8 @@ export default function Dashboard() {
                           Live
                         </div>
                         <Button 
-                          variant="ghost" 
-                          size="sm" 
                           onClick={() => setAutoScroll(!autoScroll)}
-                          className={`h-7 text-xs font-semibold ${autoScroll ? 'text-primary' : ''}`}
+                          className={`github-btn ${autoScroll ? 'github-btn-primary' : 'github-btn-secondary'}`}
                         >
                           Auto-scroll
                         </Button>
@@ -1104,10 +1148,10 @@ export default function Dashboard() {
                             {debugTotal} entries found
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setDebugPage(p => Math.max(1, p - 1))} disabled={debugPage === 1}>
+                            <Button onClick={() => setDebugPage(p => Math.max(1, p - 1))} disabled={debugPage === 1} className="github-btn github-btn-secondary h-6 px-2 text-[11px]">
                               Prev
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setDebugPage(p => p + 1)} disabled={debugPage * 50 >= debugTotal}>
+                            <Button onClick={() => setDebugPage(p => p + 1)} disabled={debugPage * 50 >= debugTotal} className="github-btn github-btn-secondary h-6 px-2 text-[11px]">
                               Next
                             </Button>
                           </div>
@@ -1180,8 +1224,8 @@ export default function Dashboard() {
                           </span>
                           Live
                         </div>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs font-semibold hover:bg-primary/10" onClick={() => fetchData()}>
-                          <RefreshCw className={`w-3 h-3 mr-1 ${networkLoading ? 'animate-spin' : ''}`} />
+                        <Button onClick={() => fetchData()} className="github-btn github-btn-secondary">
+                          <RefreshCw className={`w-3 h-3 mr-1.5 ${networkLoading ? 'animate-spin' : ''}`} />
                           Refresh
                         </Button>
                       </div>
@@ -1235,10 +1279,10 @@ export default function Dashboard() {
                             {networkTotal} requests recorded
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setNetworkPage(p => Math.max(1, p - 1))} disabled={networkPage === 1}>
+                            <Button onClick={() => setNetworkPage(p => Math.max(1, p - 1))} disabled={networkPage === 1} className="github-btn github-btn-secondary h-6 px-2 text-[11px]">
                               Prev
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setNetworkPage(p => p + 1)} disabled={networkPage * 50 >= networkTotal}>
+                            <Button onClick={() => setNetworkPage(p => p + 1)} disabled={networkPage * 50 >= networkTotal} className="github-btn github-btn-secondary h-6 px-2 text-[11px]">
                               Next
                             </Button>
                           </div>
@@ -1360,9 +1404,8 @@ export default function Dashboard() {
                                   className="h-9 bg-card border-border font-mono text-sm" 
                                 />
                                 <Button 
-                                  variant="outline" 
                                   onClick={() => updateSetting('cronExpression', settings.cronExpression)}
-                                  className="h-9 text-xs font-semibold px-4 hover:bg-muted"
+                                  className="github-btn github-btn-secondary h-9 px-4"
                                 >
                                   Save
                                 </Button>
@@ -1407,6 +1450,17 @@ export default function Dashboard() {
                             <div className="p-4 bg-muted/30 border border-border rounded-md shadow-sm">
                               <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">Files</div>
                               <div className="text-xl font-mono font-bold text-foreground">{systemStatus?.fileCount || 0}</div>
+                            </div>
+                            <div className="p-4 bg-muted/30 border border-border rounded-md shadow-sm">
+                              <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">Storage Backend</div>
+                              <div className="text-xl font-mono font-bold text-foreground flex items-center gap-2">
+                                {systemStatus?.storageBackend === 'GCS NATIVE' ? (
+                                  <Cloud className="h-5 w-5 text-blue-500" />
+                                ) : (
+                                  <HardDrive className="h-5 w-5 text-muted-foreground" />
+                                )}
+                                {systemStatus?.storageBackend || 'LOCAL FS'}
+                              </div>
                             </div>
                             <div className="p-4 bg-muted/30 border border-border rounded-md shadow-sm">
                               <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">Uptime</div>
@@ -1533,95 +1587,6 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isGCSDialogOpen} onOpenChange={setIsGCSDialogOpen}>
-        <DialogContent className="max-w-md bg-card border-border p-0 overflow-hidden">
-          <div className="github-card-header border-b border-border bg-muted/30">
-            <div className="flex items-center gap-3">
-              <Cloud className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold uppercase tracking-wider">Export to GCS</span>
-            </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsGCSDialogOpen(false)}>
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-          
-          <div className="p-6 space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="projectId" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Google Cloud Project ID</Label>
-                <Input 
-                  id="projectId" 
-                  placeholder="e.g. my-awesome-project" 
-                  value={gcsProjectId} 
-                  onChange={(e) => setGcsProjectId(e.target.value)}
-                  className="bg-muted/30 border-border font-mono text-sm"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="bucketName" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Destination Bucket Name</Label>
-                <Input 
-                  id="bucketName" 
-                  placeholder="e.g. gcp-datanator-backups" 
-                  value={gcsBucketName} 
-                  onChange={(e) => setGcsBucketName(e.target.value)}
-                  className="bg-muted/30 border-border font-mono text-sm"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="authCode" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">OAuth Authorization Code</Label>
-                  <a 
-                    href="https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=postmessage&response_type=code&scope=https://www.googleapis.com/auth/devstorage.read_write&access_type=offline" 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="text-[10px] text-primary hover:underline font-semibold"
-                  >
-                    Get Code
-                  </a>
-                </div>
-                <Input 
-                  id="authCode" 
-                  placeholder="Paste your auth code here..." 
-                  value={gcsAuthCode} 
-                  onChange={(e) => setGcsAuthCode(e.target.value)}
-                  className="bg-muted/30 border-border font-mono text-sm"
-                />
-                <p className="text-[10px] text-muted-foreground italic">
-                  Note: You need to provide a valid OAuth code with GCS write permissions.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
-              <Button variant="ghost" size="sm" onClick={() => setIsGCSDialogOpen(false)} className="text-xs font-semibold">
-                Cancel
-              </Button>
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={handleGCSExport} 
-                disabled={isExporting || !gcsProjectId || !gcsBucketName || !gcsAuthCode}
-                className="text-xs font-bold uppercase tracking-wider bg-primary hover:bg-primary/90"
-              >
-                {isExporting ? (
-                  <>
-                    <RefreshCw className="w-3 h-3 mr-2 animate-spin" />
-                    Exporting...
-                  </>
-                ) : (
-                  <>
-                    <Cloud className="w-3 h-3 mr-2" />
-                    Start Export
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>

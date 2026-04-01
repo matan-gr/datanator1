@@ -21,53 +21,6 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-// Intercept console logs to store in DB
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-const originalConsoleWarn = console.warn;
-const originalConsoleDebug = console.debug;
-
-let isLogging = false;
-function dbLog(level: string, args: any[]) {
-  if (isLogging) return;
-  isLogging = true;
-  try {
-    const db = getDb();
-    const message = args.map(a => {
-      if (a instanceof Error) return a.stack || a.message;
-      if (typeof a === 'object') {
-        try { return JSON.stringify(a); } catch(e) { return String(a); }
-      }
-      return String(a);
-    }).join(' ');
-    db.run(
-      'INSERT INTO AppLogs (id, level, message) VALUES (?, ?, ?)',
-      [uuidv4(), level, message]
-    ).catch(() => {});
-  } catch (e) {
-    // DB not initialized yet
-  } finally {
-    isLogging = false;
-  }
-}
-
-console.log = (...args) => {
-  originalConsoleLog(...args);
-  dbLog('INFO', args);
-};
-console.error = (...args) => {
-  originalConsoleError(...args);
-  dbLog('ERROR', args);
-};
-console.warn = (...args) => {
-  originalConsoleWarn(...args);
-  dbLog('WARN', args);
-};
-console.debug = (...args) => {
-  originalConsoleDebug(...args);
-  dbLog('DEBUG', args);
-};
-
 async function startServer() {
   try {
     const app = express();
@@ -81,20 +34,17 @@ async function startServer() {
       const start = Date.now();
       res.on('finish', () => {
         const duration = Date.now() - start;
-        const logMessage = `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`;
-        if (isLogging) return;
-        isLogging = true;
-        try {
-          const db = getDb();
-          db.run(
-            'INSERT INTO AppLogs (id, level, message, metadata) VALUES (?, ?, ?, ?)',
-            [uuidv4(), 'NETWORK', logMessage, JSON.stringify({ method: req.method, url: req.originalUrl, status: res.statusCode, duration })]
-          ).catch(() => {});
-        } catch (e) {
-          // DB not initialized yet
-        } finally {
-          isLogging = false;
+        // Skip spammy polling endpoints and static assets from cluttering Cloud Logging
+        const isPolling = req.originalUrl.includes('/api/v1/sync-runs') || req.originalUrl.includes('/api/v1/metrics');
+        const isStaticAsset = req.originalUrl.startsWith('/src/') || 
+                              req.originalUrl.startsWith('/@') || 
+                              req.originalUrl.startsWith('/node_modules/') || 
+                              req.originalUrl.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|tsx|ts|woff|woff2)$/);
+        
+        if (isPolling || isStaticAsset) {
+          return;
         }
+        console.log(`NETWORK: ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
       });
       next();
     });

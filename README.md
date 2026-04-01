@@ -8,7 +8,7 @@ Get up and running with GCP Datanator in minutes:
 
 1. **Clone and Install**
    ```bash
-   git clone https://github.com/your-org/gcp-datanator.git
+   git clone https://github.com/google-cloud/gcp-datanator.git
    cd gcp-datanator
    npm install
    ```
@@ -17,7 +17,6 @@ Get up and running with GCP Datanator in minutes:
    Create a `.env` file in the root directory:
    ```env
    GEMINI_API_KEY=your_gemini_api_key
-   ADMIN_PASSWORD=admin123
    ```
 
 3. **Start the Server**
@@ -26,7 +25,7 @@ Get up and running with GCP Datanator in minutes:
    ```
 
 4. **Access the Dashboard**
-   Open your browser and navigate to `http://localhost:3000`. Use the password configured in your `.env` file to log in.
+   Open your browser and navigate to `http://localhost:3000`.
 
 ## ✨ Key Features
 
@@ -39,13 +38,13 @@ Get up and running with GCP Datanator in minutes:
   - **Strict Network Timeouts:** Uses `Promise.race` to prevent hanging sockets from unresponsive external servers.
   - **Dynamic User-Agents & Exponential Backoff:** Bypasses basic rate-limiting and handles transient network failures gracefully.
 - **Local Data Lake & GCS Persistence:** Saves processed data into a structured `data/` directory. When deployed to Cloud Run, this directory is mounted to a **Google Cloud Storage (GCS)** bucket using Cloud Storage FUSE, ensuring the SQLite database and text files survive container restarts.
-- **Live React Dashboard:** A beautiful, dark-mode admin dashboard to monitor sync runs, source health, debug logs, and network activity in real-time.
+- **Live React Dashboard & Cloud Logging:** A beautiful, dark-mode admin dashboard to monitor sync runs, source health, and recent logs in real-time. For production reliability, all logs are streamed directly to **Google Cloud Logging** via standard output, while a strict rolling window of the last 500 logs is maintained in SQLite for the dashboard.
 
 ## 🏗️ Architecture
 
 The application is a Full-Stack TypeScript project:
 - **Frontend:** React 19, Vite, Tailwind CSS, shadcn/ui.
-- **Backend:** Express.js, SQLite (with WAL mode enabled for high concurrency), `rss-parser`.
+- **Backend:** Express.js, SQLite (optimized for network-attached storage), `rss-parser`.
 
 ### Directory Structure
 
@@ -54,7 +53,7 @@ The application is a Full-Stack TypeScript project:
   /components     # React UI components (Dashboard, shadcn UI)
   /server
     /api          # Express API routes
-    /db           # SQLite database initialization (WAL mode, busy timeouts)
+    /db           # SQLite database initialization (DELETE mode for GCS FUSE, busy timeouts)
     /etl          # The core ETL pipeline
       extractor.ts  # Fetches, filters, and validates RSS/Atom feeds
       transformer.ts # Cleans HTML and formats the data
@@ -66,20 +65,23 @@ The application is a Full-Stack TypeScript project:
 
 GCP Datanator is designed to be deployed as a serverless container. Because it relies on background processing and a local SQLite database, **you must configure Cloud Run correctly to prevent data loss and frozen background jobs.**
 
-We provide a highly optimized, multi-stage `Dockerfile.txt` that compiles the TypeScript backend with `esbuild` and the React frontend with `vite`, resulting in a lightweight, secure production image.
+We provide a highly optimized, multi-stage `Dockerfile.txt` and a `cloudbuild.yaml` file for automated CI/CD.
+
+### Deployment Summary
+
+Deploying to Cloud Run involves a few critical infrastructure components to ensure the app is secure, persistent, and automated:
+
+1. **Service Accounts & Permissions:** 
+   You will create a dedicated application service account (`gcp-datanator-app-sa`) that runs the container with minimal privileges, granting it access only to the necessary GCS buckets and Secret Manager secrets. A separate service account is used for the Cloud Scheduler.
+2. **Secret Management:** 
+   Sensitive credentials like `GEMINI_API_KEY`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET` are stored securely in **Google Secret Manager** and injected into the container at runtime as environment variables.
+3. **GCS Bucket Mounting (Cloud Storage FUSE):** 
+   Cloud Run containers are stateless. To persist the SQLite database (`gcp-datanator.db`) and downloaded feed files, a Google Cloud Storage (GCS) bucket is created and mounted directly to the container's `/app/data` directory using Cloud Storage FUSE. This requires the **Gen 2 execution environment** and restricting the service to a **single instance** (`--max-instances 1`) to prevent database locks.
+4. **Automated Scheduling:** 
+   The ETL pipeline is triggered automatically using **Google Cloud Scheduler**. A cron job securely invokes the `/api/v1/sync/monthly` endpoint via OIDC authentication, ensuring your data is always up-to-date without manual intervention.
 
 ### 📖 Full Deployment Guide
-For the complete, step-by-step production deployment instructions (including setting up Artifact Registry, Cloud Storage FUSE for SQLite persistence, Secret Manager, and Cloud Scheduler), please read the **[Deployment Guide (deploy.md)](./deploy.md)**.
-
-### Quick Build Overview
-```bash
-# 1. Build the production image using the provided Dockerfile.txt
-docker build -t gcp-datanator:latest -f Dockerfile.txt .
-
-# 2. Push to Google Artifact Registry
-docker tag gcp-datanator:latest us-central1-docker.pkg.dev/YOUR_PROJECT/repo/gcp-datanator:latest
-docker push us-central1-docker.pkg.dev/YOUR_PROJECT/repo/gcp-datanator:latest
-```
+For the complete, step-by-step production deployment instructions, please read the **[Deployment Guide (deploy.md)](./deploy.md)**.
 
 ## 🔌 API & Automation
 
@@ -110,7 +112,7 @@ gcloud scheduler jobs create http gcp-datanator-sync \
 ### 🗄️ GCS Integration & Persistence
 Because Cloud Run containers are stateless, any data written to the local disk is lost when the container restarts. GCP Datanator solves this by using **Cloud Storage FUSE** to mount a Google Cloud Storage (GCS) bucket directly into the container's file system at `/app/data`.
 
-This allows the SQLite database (`gcp-datanator.db`) and all extracted text files to persist across deployments and container restarts. The application is specifically optimized for network-attached storage using SQLite `WAL` mode and extended busy timeouts.
+This allows the SQLite database (`gcp-datanator.db`) and all extracted text files to persist across deployments and container restarts. The application is specifically optimized for network-attached storage using SQLite `DELETE` journal mode and extended busy timeouts.
 
 To configure this during deployment:
 1. Create a GCS bucket (e.g., `gs://my-datanator-storage`).
@@ -125,8 +127,9 @@ To configure this during deployment:
 The built-in dashboard provides comprehensive monitoring:
 - **Overview:** View total runs, items parsed over time, and system health.
 - **Data Sources:** Monitor the health of individual feeds and trigger targeted syncs.
-- **Debug Console:** View live application logs, including exact deduplication metrics (e.g., *Fetched 30 items. Skipped 28 duplicates.*) and fatal errors.
-- **Automated Cleanup:** The system automatically prunes logs and orphaned files older than the configured retention period (default: 30 days) to prevent disk exhaustion.
+- **Debug Console:** View recent application logs directly in the UI, including exact deduplication metrics (e.g., *Fetched 30 items. Skipped 28 duplicates.*) and fatal errors.
+- **Production Logging:** All logs are automatically captured by **Google Cloud Logging** for long-term retention, alerting, and analysis. The internal SQLite database enforces a strict 500-log hard cap to prevent database bloat and FUSE corruption.
+- **Automated Cleanup:** The system automatically prunes old sync runs and orphaned files older than the configured retention period (default: 30 days) to prevent disk exhaustion.
 
 ## 🛡️ Error Handling
 

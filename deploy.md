@@ -9,7 +9,8 @@ This application is engineered for enterprise-grade production environments:
 *   **Lightweight Container:** Uses a multi-stage `node:22-alpine` Docker build. The final image contains *only* production dependencies and compiled assets (no raw TypeScript files or dev tools).
 *   **Security:** `npm ci --omit=dev` ensures no development dependencies are included in the runtime. The container runs with minimal privileges.
 *   **Persistence (GCS Configuration):** Uses Google Cloud Storage (GCS) FUSE to mount a persistent volume (`/app/data`). This ensures the SQLite database (`gcp-datanator.db`) and the downloaded text feeds survive ephemeral container restarts.
-*   **Concurrency & Stability:** SQLite is configured with WAL (Write-Ahead Logging) mode and busy timeouts. Cloud Run is configured with `--max-instances 1` and `--no-cpu-throttling` to prevent database locks and ensure background ETL jobs complete successfully without being frozen by GCP.
+*   **Concurrency & Stability:** SQLite is configured with `DELETE` journal mode (optimized for network mounts) and busy timeouts. Cloud Run is configured with `--max-instances 1` and `--no-cpu-throttling` to prevent database locks and ensure background ETL jobs complete successfully without being frozen by GCP.
+*   **Cloud Native Logging:** The application writes all logs to `stdout`/`stderr`, which are automatically ingested by **Google Cloud Logging**. A strict 500-log rolling window is kept in SQLite for the Admin UI to prevent database bloat on the FUSE mount.
 
 ---
 
@@ -33,6 +34,7 @@ This application is engineered for enterprise-grade production environments:
 ## 📦 Step 1: Create Artifact Registry & GCS Bucket
 
 1.  **Create an Artifact Registry Repository:**
+    Artifact Registry is where your built Docker images will be stored before being deployed to Cloud Run.
     ```bash
     gcloud artifacts repositories create datanator-repo \
       --repository-format=docker \
@@ -74,9 +76,9 @@ You must tell Cloud Run to mount the GCS bucket you created earlier to a specifi
 ```
 
 **3. SQLite Optimizations for Network Storage**
-Because GCS FUSE is a network file system, latency is higher than a local SSD. The application code (`src/server/db/sqlite.ts`) is already optimized for this with specific PRAGMAs. You do not need to run these manually, but it is important to understand why they exist:
-*   `PRAGMA journal_mode = WAL;` (Write-Ahead Logging improves concurrency on network drives)
-*   `PRAGMA synchronous = NORMAL;` (Reduces the number of fsync() calls)
+Because GCS FUSE is a network file system, latency is higher than a local SSD, and it does not support mmap (which WAL mode requires). The application code (`src/server/db/sqlite.ts`) is already optimized for this with specific PRAGMAs. You do not need to run these manually, but it is important to understand why they exist:
+*   `PRAGMA journal_mode = DELETE;` (WAL mode is not supported by GCS FUSE and causes corruption)
+*   `PRAGMA synchronous = FULL;` (Ensures data is safely written to the network drive)
 *   `PRAGMA busy_timeout = 5000;` (Waits up to 5 seconds if the database is locked by another process)
 
 **4. Single Instance Concurrency**
@@ -85,13 +87,19 @@ SQLite does not support distributed writes across multiple machines. If Cloud Ru
 --max-instances 1
 ```
 
+**5. Container Port Configuration**
+The application is hardcoded to listen on port 3000. You must tell Cloud Run to route traffic to this port:
+```bash
+--port 3000
+```
+
 *(Note: These flags are automatically handled if you use the provided `cloudbuild.yaml` in Step 5. If you deploy manually via `gcloud run deploy`, you must include them).*
 
 ---
 
 ## 🔐 Step 2: Service Accounts and Permissions
 
-You need two service accounts: one for the application itself and one for the automated scheduler. You also need to grant Cloud Build permissions to deploy.
+You need two service accounts: one for the application itself and one for the automated scheduler. You also need to grant Cloud Build permissions to deploy. By using dedicated service accounts, we follow the principle of least privilege.
 
 ### 1. Application Service Account
 This account runs the Cloud Run service and needs access to the storage bucket.
@@ -142,7 +150,7 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 
 ## 🔑 Step 3: Environment Variables and Secrets
 
-Store sensitive keys in **Secret Manager** for maximum security.
+Store sensitive keys in **Secret Manager** for maximum security. This prevents hardcoding secrets in your Docker image or Cloud Run configuration.
 
 1.  **Create Secrets**:
     ```bash
@@ -229,11 +237,85 @@ If you want to use the "Export to GCS" feature in the dashboard:
 
 ---
 
+## 🔒 Step 8: Securing the Application (Optional but Recommended)
+
+By default, the `cloudbuild.yaml` deploys the service with `--allow-unauthenticated`, meaning anyone on the internet can access the dashboard. For production, you should secure the application.
+
+The recommended approach is to use **Identity-Aware Proxy (IAP)**:
+1. Remove the `--allow-unauthenticated` flag from `cloudbuild.yaml` and redeploy.
+2. Set up a Global External HTTP(S) Load Balancer pointing to your Cloud Run service.
+3. Enable IAP on the Backend Service.
+4. Grant the `IAP-secured Web App User` role to the Google Groups or users who should have access to the dashboard.
+
+This ensures that only authorized users within your Google Workspace or specific Google accounts can access the dashboard, without needing to build custom authentication into the app itself.
+
+---
+
+## 🔄 Step 9: Continuous Deployment (GitHub Actions)
+
+The repository includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) to automatically deploy to Cloud Run when you push to the `main` branch. 
+
+To make this work, you must configure **Workload Identity Federation (WIF)**. This is the modern, secure way to authenticate GitHub Actions to Google Cloud without using long-lived JSON service account keys.
+
+### 1. Set up Workload Identity Federation
+
+Run these commands in your terminal (replace `YOUR_PROJECT_ID` and `YOUR_GITHUB_REPO` like `username/repo`):
+
+```bash
+export PROJECT_ID="YOUR_PROJECT_ID"
+export REPO="YOUR_GITHUB_REPO" # e.g., "google-cloud/gcp-datanator"
+
+# 1. Enable the IAM Credentials API
+gcloud services enable iamcredentials.googleapis.com --project="${PROJECT_ID}"
+
+# 2. Create a Workload Identity Pool
+gcloud iam workload-identity-pools create "github-actions-pool" \
+  --project="${PROJECT_ID}" \
+  --location="global" \
+  --display-name="GitHub Actions Pool"
+
+# 3. Create a Workload Identity Provider in that pool
+gcloud iam workload-identity-pools providers create-oidc "github-actions-provider" \
+  --project="${PROJECT_ID}" \
+  --location="global" \
+  --workload-identity-pool="github-actions-pool" \
+  --display-name="GitHub Actions Provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+# 4. Allow the GitHub repository to impersonate the Application Service Account
+# (Assuming you created gcp-datanator-app-sa in Step 2)
+gcloud iam service-accounts add-iam-policy-binding "gcp-datanator-app-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --project="${PROJECT_ID}" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')/locations/global/workloadIdentityPools/github-actions-pool/attribute.repository/${REPO}"
+```
+
+### 2. Add GitHub Repository Secrets
+
+You need to add three secrets to your GitHub repository (**Settings > Secrets and variables > Actions > New repository secret**):
+
+1. **`GCP_PROJECT_ID`**: Your Google Cloud Project ID.
+2. **`WIF_SERVICE_ACCOUNT`**: The email of your service account (e.g., `gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com`).
+3. **`WIF_PROVIDER`**: The full identifier of the Workload Identity Provider. You can get this exact string by running:
+   ```bash
+   gcloud iam workload-identity-pools providers describe "github-actions-provider" \
+     --project="${PROJECT_ID}" \
+     --location="global" \
+     --workload-identity-pool="github-actions-pool" \
+     --format="value(name)"
+   ```
+   *(It will look something like: `projects/1234567890/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider`)*
+
+Once these secrets are added, your GitHub Action will authenticate successfully and deploy to Cloud Run!
+
+---
+
 ## 🩺 Troubleshooting
 
 ### 1. "Read-only file system" error from SQLite
 **Cause**: SQLite requires file locking which GCS FUSE (the volume mount) handles differently than local disk.
-**Fix**: Ensure you are using `--execution-environment gen2`. The application is already configured with `PRAGMA journal_mode = WAL;` and `PRAGMA busy_timeout = 5000;` to mitigate this.
+**Fix**: Ensure you are using `--execution-environment gen2`. The application is already configured with `PRAGMA journal_mode = DELETE;` and `PRAGMA busy_timeout = 5000;` to mitigate this.
 
 ### 2. GCS Export fails with "Bucket not found"
 **Cause**: The bucket name provided in the UI does not exist in the project, or the OAuth token lacks the `devstorage.read_write` scope.
