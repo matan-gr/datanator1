@@ -56,26 +56,48 @@ This application is engineered for enterprise-grade production environments:
 
 Running SQLite in Cloud Run requires special configuration because Cloud Run instances are ephemeral. By default, any changes to a local SQLite file are lost when the instance spins down. To solve this, we use **Cloud Storage FUSE**, which mounts a GCS bucket as a local file system inside the container.
 
-Here is exactly how to configure it:
+Here is exactly how to configure it. If you are deploying manually using `gcloud run deploy`, you must include these specific flags:
 
 **1. Enable the Second Generation Execution Environment**
 Cloud Storage FUSE requires the Cloud Run Gen 2 execution environment because it needs Linux kernel features (like FUSE) that aren't available in Gen 1.
-```bash
-# This flag is required when deploying
---execution-environment gen2
-```
+`--execution-environment gen2`
 
 **2. Configure the Volume Mount**
 You must tell Cloud Run to mount the GCS bucket you created earlier to a specific path inside the container. Our application expects data to be in `/app/data`.
+`--add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data`
+`--add-volume-mount=volume=data-vol,mount-path=/app/data`
+
+**3. Single Instance Concurrency**
+SQLite does not support distributed writes across multiple machines. If Cloud Run scales to 2 or more instances, they will both try to write to the same SQLite file over GCS FUSE, leading to `database is locked` errors or corruption. You **must** restrict Cloud Run to a single instance:
+`--max-instances 1`
+
+**4. Container Port Configuration**
+The application is hardcoded to listen on port 3000. You must tell Cloud Run to route traffic to this port:
+`--port 3000`
+
+### 🚀 Complete Manual Deployment Command
+If you are not using the automated `cloudbuild.yaml` (Step 5), here is the complete, combined command to deploy the application with Gen 2 and GCS FUSE enabled:
+
 ```bash
-# 1. Define the volume (linking it to your bucket)
---add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data
-
-# 2. Mount the volume inside the container
---add-volume-mount=volume=data-vol,mount-path=/app/data
+gcloud run deploy gcp-datanator \
+  --image=us-central1-docker.pkg.dev/YOUR_PROJECT_ID/datanator-repo/gcp-datanator:latest \
+  --region=us-central1 \
+  --service-account=gcp-datanator-app-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --allow-unauthenticated \
+  --execution-environment=gen2 \
+  --add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data \
+  --add-volume-mount=volume=data-vol,mount-path=/app/data \
+  --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
+  --set-env-vars=NODE_ENV=production \
+  --port=3000 \
+  --memory=2Gi \
+  --cpu=1 \
+  --max-instances=1 \
+  --no-cpu-throttling
 ```
+*(Note: If you use the provided `cloudbuild.yaml` in Step 5, all of these flags are automatically handled for you).*
 
-**3. SQLite Optimizations for Network Storage**
+**5. SQLite Optimizations for Network Storage**
 Because GCS FUSE is a network file system, latency is higher than a local SSD, and it does not support mmap (which WAL mode requires). The application code (`src/server/db/sqlite.ts`) is already optimized for this with specific PRAGMAs. You do not need to run these manually, but it is important to understand why they exist:
 *   `PRAGMA journal_mode = DELETE;` (WAL mode is not supported by GCS FUSE and causes corruption)
 *   `PRAGMA synchronous = FULL;` (Ensures data is safely written to the network drive)
@@ -83,20 +105,6 @@ Because GCS FUSE is a network file system, latency is higher than a local SSD, a
 *   `PRAGMA foreign_keys = ON;` (Enforces relational integrity)
 *   `BEGIN IMMEDIATE TRANSACTION` (Used during schema migrations to prevent deadlocks when multiple Cloud Run instances start concurrently)
 *   Graceful Shutdown: Intercepts `SIGTERM` and `SIGINT` signals to safely close SQLite connections (`closeDb()`) before the container exits, preventing database corruption during scale-down events.
-
-**4. Single Instance Concurrency**
-SQLite does not support distributed writes across multiple machines. If Cloud Run scales to 2 or more instances, they will both try to write to the same SQLite file over GCS FUSE, leading to `database is locked` errors or corruption. You **must** restrict Cloud Run to a single instance:
-```bash
---max-instances 1
-```
-
-**5. Container Port Configuration**
-The application is hardcoded to listen on port 3000. You must tell Cloud Run to route traffic to this port:
-```bash
---port 3000
-```
-
-*(Note: These flags are automatically handled if you use the provided `cloudbuild.yaml` in Step 5. If you deploy manually via `gcloud run deploy`, you must include them).*
 
 ---
 
