@@ -167,7 +167,7 @@ done
 The deployment process is automated using `cloudbuild.yaml`. Before deploying, you can customize the deployment variables.
 
 ### 1. Default Variables (Automatic)
-You **do not** need to define `$PROJECT_ID` or `$COMMIT_SHA` in the YAML file. Google Cloud Build automatically populates `$PROJECT_ID` based on the active `gcloud` project you set in the Prerequisites.
+You **do not** need to define `$PROJECT_ID` or `$BUILD_ID` in the YAML file. Google Cloud Build automatically populates `$PROJECT_ID` based on the active `gcloud` project you set in the Prerequisites, and `$BUILD_ID` is automatically generated for every build.
 
 ### 2. Custom Substitutions (Manual)
 Open `cloudbuild.yaml` and look at the bottom `substitutions` block. You can change these values to match your preferred region, repository name, or service name:
