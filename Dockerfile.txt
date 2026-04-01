@@ -1,6 +1,7 @@
 FROM node:22-alpine AS builder
 
 WORKDIR /app
+ENV npm_config_update_notifier=false
 
 # Install dependencies
 RUN apk add --no-cache python3 make g++
@@ -22,6 +23,7 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV npm_config_update_notifier=false
 
 # Install production dependencies only
 COPY package*.json ./
