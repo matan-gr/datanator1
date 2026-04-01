@@ -43,23 +43,36 @@ export async function saveLocally(content: string, source: DataSource, runId: st
     
     return filePath;
   } catch (error) {
-    console.error(`Failed to save local file ${filePath}:`, error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    console.error(`[LOADER ERROR] Failed to save local file for source: ${source.name} (${source.id})`);
+    console.error(`[LOADER ERROR] Target Path: ${filePath}`);
+    console.error(`[LOADER ERROR] Temp Path: ${tempPath}`);
+    console.error(`[LOADER ERROR] Backup Path: ${backupPath}`);
+    console.error(`[LOADER ERROR] FS Error Message: ${errorMessage}`);
+    if (errorStack) {
+      console.error(`[LOADER ERROR] Stack Trace: ${errorStack}`);
+    }
+
     // Restore backup on failure
     if (fs.existsSync(backupPath)) {
       try {
         fs.copyFileSync(backupPath, filePath);
         console.debug(`Restored backup for ${filePath} after failure.`);
       } catch (restoreError) {
-        console.error(`CRITICAL: Failed to restore backup for ${filePath}:`, restoreError);
+        const restoreErrorMessage = restoreError instanceof Error ? restoreError.message : String(restoreError);
+        console.error(`[LOADER CRITICAL] Failed to restore backup for ${filePath}. Error: ${restoreErrorMessage}`);
       }
     }
     if (fs.existsSync(tempPath)) {
       try {
         fs.unlinkSync(tempPath);
       } catch (unlinkError) {
-        console.error(`Failed to delete temp file ${tempPath}:`, unlinkError);
+        const unlinkErrorMessage = unlinkError instanceof Error ? unlinkError.message : String(unlinkError);
+        console.error(`[LOADER ERROR] Failed to delete temp file ${tempPath}. Error: ${unlinkErrorMessage}`);
       }
     }
-    throw new Error(`Local save failed for ${source.name}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Local save failed for ${source.name} at ${filePath}: ${errorMessage}`);
   }
 }

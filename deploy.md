@@ -69,17 +69,20 @@ Cloud Storage FUSE requires the Cloud Run Gen 2 execution environment because it
 You must tell Cloud Run to mount the GCS bucket you created earlier to a specific path inside the container. Our application expects data to be in `/app/data`.
 ```bash
 # 1. Define the volume (linking it to your bucket)
---add-volume=name=sqlite-data,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data
+--add-volume=name=data-vol,type=cloud-storage,bucket=YOUR_PROJECT_ID-gcp-datanator-data
 
 # 2. Mount the volume inside the container
---add-volume-mount=volume=sqlite-data,mount-path=/app/data
+--add-volume-mount=volume=data-vol,mount-path=/app/data
 ```
 
 **3. SQLite Optimizations for Network Storage**
 Because GCS FUSE is a network file system, latency is higher than a local SSD, and it does not support mmap (which WAL mode requires). The application code (`src/server/db/sqlite.ts`) is already optimized for this with specific PRAGMAs. You do not need to run these manually, but it is important to understand why they exist:
 *   `PRAGMA journal_mode = DELETE;` (WAL mode is not supported by GCS FUSE and causes corruption)
 *   `PRAGMA synchronous = FULL;` (Ensures data is safely written to the network drive)
-*   `PRAGMA busy_timeout = 5000;` (Waits up to 5 seconds if the database is locked by another process)
+*   `PRAGMA busy_timeout = 10000;` (Waits up to 10 seconds if the database is locked by another process)
+*   `PRAGMA foreign_keys = ON;` (Enforces relational integrity)
+*   `BEGIN IMMEDIATE TRANSACTION` (Used during schema migrations to prevent deadlocks when multiple Cloud Run instances start concurrently)
+*   Graceful Shutdown: Intercepts `SIGTERM` and `SIGINT` signals to safely close SQLite connections (`closeDb()`) before the container exits, preventing database corruption during scale-down events.
 
 **4. Single Instance Concurrency**
 SQLite does not support distributed writes across multiple machines. If Cloud Run scales to 2 or more instances, they will both try to write to the same SQLite file over GCS FUSE, leading to `database is locked` errors or corruption. You **must** restrict Cloud Run to a single instance:
@@ -153,6 +156,7 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 Store sensitive keys in **Secret Manager** for maximum security. This prevents hardcoding secrets in your Docker image or Cloud Run configuration.
 
 1.  **Create Secrets**:
+    *(If you don't have Google OAuth credentials yet, you can use "TODO" as a placeholder for the Client ID and Secret. You can update them later in Secret Manager).*
     ```bash
     echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
     echo -n "YOUR_GOOGLE_CLIENT_ID" | gcloud secrets create GOOGLE_CLIENT_ID --data-file=-
@@ -215,13 +219,14 @@ Create a Cloud Scheduler job to trigger the sync automatically every **Sunday, T
 ```bash
 gcloud scheduler jobs create http gcp-datanator-sync \
   --schedule="0 2 * * 0,2,5" \
-  --uri="https://YOUR_CLOUD_RUN_URL/api/v1/sync/monthly" \
-  --http-method=POST \
-  --oidc-service-account-email=gcp-datanator-scheduler-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com \
-  --message-body='{"triggerType": "SCHEDULED"}' \
-  --headers="Content-Type=application/json"
+  --uri="https://YOUR_CLOUD_RUN_URL/api/v1/sync/monthly?wait=true" \
+  --http-method=GET \
+  --oidc-service-account-email=gcp-datanator-scheduler-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
 ```
 *(Replace `YOUR_CLOUD_RUN_URL` with the URL provided after the deployment step).*
+
+> **💡 Why `GET` and `?wait=true`?**
+> Cloud Run throttles CPU to near zero immediately after an HTTP response is sent (unless "CPU always allocated" is enabled). By using `GET` with `?wait=true`, the API endpoint will wait for the background ETL process to complete *before* returning an HTTP 200 response. This ensures Cloud Run keeps the CPU active for the entire duration of the sync.
 
 ---
 
@@ -315,7 +320,7 @@ Once these secrets are added, your GitHub Action will authenticate successfully 
 
 ### 1. "Read-only file system" error from SQLite
 **Cause**: SQLite requires file locking which GCS FUSE (the volume mount) handles differently than local disk.
-**Fix**: Ensure you are using `--execution-environment gen2`. The application is already configured with `PRAGMA journal_mode = DELETE;` and `PRAGMA busy_timeout = 5000;` to mitigate this.
+**Fix**: Ensure you are using `--execution-environment gen2`. The application is already configured with `PRAGMA journal_mode = DELETE;` and `PRAGMA busy_timeout = 10000;` to mitigate this.
 
 ### 2. GCS Export fails with "Bucket not found"
 **Cause**: The bucket name provided in the UI does not exist in the project, or the OAuth token lacks the `devstorage.read_write` scope.
@@ -327,3 +332,7 @@ Once these secrets are added, your GitHub Action will authenticate successfully 
 ```bash
 gcloud run services update gcp-datanator --memory=4Gi
 ```
+
+### 4. Docker build fails on sqlite3 installation
+**Cause**: The `node:22-alpine` image might lack build tools if pre-built binaries for `sqlite3` are not available for your specific architecture.
+**Fix**: The provided `Dockerfile.txt` already includes `RUN apk add --no-cache python3 make g++` to handle this. If you still encounter issues, try switching to a Debian-based image (e.g., `FROM node:22-slim`).

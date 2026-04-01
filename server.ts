@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-import { initDb, getDb } from './src/server/db/sqlite.ts';
+import { initDb, getDb, closeDb } from './src/server/db/sqlite.ts';
 import { apiRouter } from './src/server/api/routes.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -92,10 +92,11 @@ async function startServer() {
       console.log(`Server running on http://localhost:${PORT}`);
     });
 
-    const gracefulShutdown = () => {
+    const gracefulShutdown = async () => {
       console.log('Received kill signal, shutting down gracefully');
-      server.close(() => {
+      server.close(async () => {
         console.log('Closed out remaining connections');
+        await closeDb();
         process.exit(0);
       });
       setTimeout(() => {

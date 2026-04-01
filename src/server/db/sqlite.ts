@@ -26,16 +26,18 @@ export async function initDb() {
     await db.exec(`
       PRAGMA journal_mode = DELETE;
       PRAGMA synchronous = FULL;
-      PRAGMA busy_timeout = 5000;
+      PRAGMA busy_timeout = 10000;
       PRAGMA auto_vacuum = INCREMENTAL;
+      PRAGMA foreign_keys = ON;
     `);
   } else {
     // Local development can safely use WAL mode for better performance
     await db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
+      PRAGMA busy_timeout = 10000;
       PRAGMA auto_vacuum = INCREMENTAL;
+      PRAGMA foreign_keys = ON;
     `);
   }
 
@@ -53,7 +55,7 @@ export async function initDb() {
   
   if (hasSyncRuns && !hasV1Migration) {
     // Mark V1 as applied for existing databases to prevent re-running
-    await db.run("INSERT INTO SchemaMigrations (version) VALUES (1)");
+    await db.run("INSERT OR IGNORE INTO SchemaMigrations (version) VALUES (1)");
   }
 
   // Define database migrations
@@ -112,15 +114,24 @@ export async function initDb() {
 
   // Apply pending migrations
   for (const migration of migrations) {
-    const isApplied = await db.get("SELECT version FROM SchemaMigrations WHERE version = ?", migration.version);
+    let isApplied = await db.get("SELECT version FROM SchemaMigrations WHERE version = ?", migration.version);
     if (!isApplied) {
       console.log(`Applying database migration v${migration.version}...`);
-      await db.exec('BEGIN TRANSACTION');
+      
+      // Use IMMEDIATE transaction to acquire write lock immediately and prevent deadlocks during concurrent startups
+      await db.exec('BEGIN IMMEDIATE TRANSACTION');
       try {
-        await db.exec(migration.up);
-        await db.run("INSERT INTO SchemaMigrations (version) VALUES (?)", migration.version);
-        await db.exec('COMMIT');
-        console.log(`Migration v${migration.version} applied successfully.`);
+        // Re-check inside transaction to handle concurrent startups
+        isApplied = await db.get("SELECT version FROM SchemaMigrations WHERE version = ?", migration.version);
+        if (!isApplied) {
+          await db.exec(migration.up);
+          await db.run("INSERT INTO SchemaMigrations (version) VALUES (?)", migration.version);
+          await db.exec('COMMIT');
+          console.log(`Migration v${migration.version} applied successfully.`);
+        } else {
+          await db.exec('COMMIT');
+          console.log(`Migration v${migration.version} was already applied by another instance.`);
+        }
       } catch (error) {
         await db.exec('ROLLBACK');
         console.error(`Failed to apply migration v${migration.version}:`, error);
@@ -131,7 +142,6 @@ export async function initDb() {
 
   // Initialize default settings
   const defaultSettings = [
-    { key: 'cronExpression', value: '0 0 1 * *' },
     { key: 'logRetentionDays', value: '0' } // 0 means Forever
   ];
 
@@ -143,4 +153,11 @@ export async function initDb() {
 export function getDb() {
   if (!db) throw new Error("Database not initialized");
   return db;
+}
+
+export async function closeDb() {
+  if (db) {
+    await db.close();
+    console.log("Database connection closed gracefully.");
+  }
 }

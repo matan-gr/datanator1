@@ -136,11 +136,13 @@ apiRouter.get('/analytics', async (req, res) => {
 });
 
 // Trigger full monthly sync
-apiRouter.post('/sync/monthly', async (req, res) => {
+apiRouter.all('/sync/monthly', async (req, res) => {
   try {
-    const triggerType = req.body?.triggerType || 'MANUAL';
-    const force = req.body?.force || false;
-    const runId = await runSync(triggerType, undefined, force);
+    const triggerType = req.body?.triggerType || req.query?.triggerType || (req.method === 'GET' ? 'SCHEDULED' : 'MANUAL');
+    const force = req.body?.force || req.query?.force === 'true' || false;
+    const wait = req.body?.wait || req.query?.wait === 'true' || req.method === 'GET' || false;
+    
+    const runId = await runSync(triggerType as any, undefined, force, wait);
     res.json({ success: true, runId, message: 'Monthly sync triggered successfully' });
   } catch (error) {
     handleError(res, error, 'Monthly sync failed');
@@ -149,12 +151,12 @@ apiRouter.post('/sync/monthly', async (req, res) => {
 
 // Trigger targeted sync for debugging
 apiRouter.post('/sync/targeted', async (req, res) => {
-  const { sourceId, force } = req.body;
+  const { sourceId, force, wait } = req.body;
   try {
     if (!sourceId) {
       return res.status(400).json({ success: false, error: 'sourceId is required' });
     }
-    const runId = await runSync('MANUAL', sourceId, force);
+    const runId = await runSync('MANUAL', sourceId, force, wait);
     res.json({ success: true, runId, message: 'Targeted sync triggered successfully' });
   } catch (error) {
     handleError(res, error, 'Targeted sync failed');
@@ -347,19 +349,44 @@ apiRouter.post('/system/purge', async (req, res) => {
     // Delete files
     const dataDir = path.join(process.env.DATA_DIR || path.join(process.cwd(), 'data'), 'feeds');
     if (fs.existsSync(dataDir)) {
-      const files = fs.readdirSync(dataDir);
-      for (const file of files) {
-        try {
-          fs.unlinkSync(path.join(dataDir, file));
-        } catch (fileError) {
-          console.error(`Failed to delete file ${file} during purge:`, fileError);
-        }
+      try {
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      } catch (fileError) {
+        console.error(`Failed to delete feeds directory during purge:`, fileError);
       }
+    }
+    // Recreate the directory
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
 
     res.json({ success: true, message: 'System purged successfully' });
   } catch (error) {
     handleError(res, error, 'Failed to purge system');
+  }
+});
+
+// Reset settings to defaults
+apiRouter.post('/system/reset', async (req, res) => {
+  try {
+    const db = getDb();
+    await db.exec('BEGIN TRANSACTION');
+    try {
+      await db.run('DELETE FROM Settings');
+      const defaultSettings = [
+        { key: 'logRetentionDays', value: '0' }
+      ];
+      for (const setting of defaultSettings) {
+        await db.run('INSERT INTO Settings (key, value) VALUES (?, ?)', setting.key, setting.value);
+      }
+      await db.exec('COMMIT');
+    } catch (e) {
+      await db.exec('ROLLBACK');
+      throw e;
+    }
+    res.json({ success: true, message: 'Settings reset to defaults' });
+  } catch (error) {
+    handleError(res, error, 'Failed to reset settings');
   }
 });
 

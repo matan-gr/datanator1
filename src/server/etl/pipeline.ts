@@ -45,7 +45,7 @@ async function logAppEvent(db: any, level: 'INFO' | 'WARN' | 'ERROR' | 'NETWORK'
   }
 }
 
-export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: string, force: boolean = false): Promise<string> {
+export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: string, force: boolean = false, wait: boolean = false): Promise<string> {
   const db = getDb();
   
   // Self-heal: Mark any RUNNING jobs older than 30 minutes as FAILED
@@ -113,10 +113,20 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
           // Log exact deduplication metrics
           const totalFetched = rawItems.length;
           const duplicates = totalFetched - newRawItems.length;
+          
+          if (duplicates > 0) {
+            await logAppEvent(
+              db,
+              'INFO',
+              `Skipped ${duplicates} already parsed items for source: ${source.name}`,
+              runId
+            );
+          }
+
           await logAppEvent(
             db,
             'INFO',
-            `Source ${source.name}: Fetched ${totalFetched} items. Skipped ${duplicates} duplicates. Processing ${newRawItems.length} new items.`,
+            `Source ${source.name}: Fetched ${totalFetched} items. Processing ${newRawItems.length} new items.`,
             runId
           );
           
@@ -282,9 +292,13 @@ export async function runSync(triggerType: 'SCHEDULED' | 'MANUAL', sourceId?: st
   };
 
   // Execute background process
-  syncProcess().catch(err => {
-    console.error(`Fatal error in background sync process ${runId}:`, err);
-  });
+  if (wait) {
+    await syncProcess();
+  } else {
+    syncProcess().catch(err => {
+      console.error(`Fatal error in background sync process ${runId}:`, err);
+    });
+  }
   
   return runId;
 }

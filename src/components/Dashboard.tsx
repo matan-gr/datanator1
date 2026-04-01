@@ -7,12 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { toast } from 'sonner';
-import { Play, Database, RefreshCw, AlertCircle, CheckCircle2, Clock, ExternalLink, Activity, Search, ChevronLeft, ChevronRight, FileText, Download, Settings, ShieldCheck, Server, Terminal, ListFilter, Sparkles, Moon, Sun, BookOpen, Eye, X, Cloud, AlertTriangle, XCircle, Pencil, Code, HardDrive } from 'lucide-react';
+import { Play, Database, RefreshCw, AlertCircle, CheckCircle2, Clock, ExternalLink, Activity, Search, ChevronLeft, ChevronRight, FileText, Download, Settings, ShieldCheck, Server, Terminal, ListFilter, Sparkles, Moon, Sun, BookOpen, Eye, X, Cloud, AlertTriangle, XCircle, Pencil, Code } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Label } from './ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
 import { useTheme } from 'next-themes';
@@ -98,7 +99,49 @@ export default function Dashboard() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [purging, setPurging] = useState(false);
+  const [showPurgeDialog, setShowPurgeDialog] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
   const [systemStatus, setSystemStatus] = useState<any>(null);
+
+  // GCS Export State
+  const [isGCSDialogOpen, setIsGCSDialogOpen] = useState(false);
+  const [gcsProjectId, setGcsProjectId] = useState('');
+  const [gcsBucketName, setGcsBucketName] = useState('');
+  const [gcsAuthCode, setGcsAuthCode] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleGCSExport = async () => {
+    if (!gcsProjectId || !gcsBucketName || !gcsAuthCode) {
+      toast.error('Project ID, Bucket Name, and Auth Code are required');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const result = await fetchJson('/api/v1/files-export-gcs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: gcsProjectId,
+          bucketName: gcsBucketName,
+          authCode: gcsAuthCode
+        })
+      });
+      if (result.success) {
+        toast.success(result.message);
+        setIsGCSDialogOpen(false);
+        // Reset form
+        setGcsAuthCode('');
+      } else {
+        toast.error(result.error || 'Export failed');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to export to GCS');
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleDownloadAll = () => {
     window.open('/api/v1/files-download-all', '_blank');
@@ -213,7 +256,7 @@ export default function Dashboard() {
   };
 
   const purgeSystem = async () => {
-    if (!confirm('Are you absolutely sure? This will delete ALL data and files.')) return;
+    setShowPurgeDialog(false);
     try {
       setPurging(true);
       const res = await fetchJson('/api/v1/system/purge', {
@@ -229,6 +272,23 @@ export default function Dashboard() {
       toast.error(error instanceof Error ? error.message : 'Failed to purge system');
     } finally {
       setPurging(false);
+    }
+  };
+
+  const resetSettings = async () => {
+    setShowResetDialog(false);
+    try {
+      const res = await fetchJson('/api/v1/system/reset', {
+        method: 'POST'
+      });
+      if (res.success) {
+        toast.success('Settings reset successfully');
+        fetchData();
+      } else {
+        toast.error(res.error || 'Failed to reset settings');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to reset settings');
     }
   };
 
@@ -577,36 +637,27 @@ export default function Dashboard() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col min-h-screen">
         <header className="dashboard-header">
           <div className="max-w-[1920px] mx-auto w-full flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <motion.div 
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-[#1a73e8] to-[#0d47a1] shadow-lg shadow-blue-900/20 border border-blue-400/30 overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMDUiLz4KPC9zdmc+')] opacity-50" />
-                <div className="absolute top-0 right-0 w-6 h-6 bg-white/20 rounded-bl-full blur-[2px]" />
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white relative z-10 drop-shadow-md">
-                  <path d="M12 3L2 8L12 13L22 8L12 3Z" fill="currentColor" fillOpacity="0.3"/>
+            <div className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white text-[#24292f] dark:text-[#010409]">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
+                  <path d="M12 3L2 8L12 13L22 8L12 3Z" fill="currentColor" />
                   <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M2 16L12 21L22 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-              </motion.div>
-              <div className="flex flex-col justify-center">
-                <span className="text-[15px] font-bold text-white tracking-tight leading-none mb-0.5">GCP Datanator</span>
-                <span className="text-[10px] text-blue-200/80 font-medium tracking-[0.15em] uppercase leading-none">Intelligence</span>
               </div>
+              <span className="text-[16px] font-semibold text-white tracking-tight">GCP Datanator</span>
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="dashboard-version hidden sm:inline-block">v0.9.0</span>
+              <span className="dashboard-version hidden sm:inline-block">v{__APP_VERSION__}</span>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="h-8 w-8 text-white hover:bg-white/10"
+                className="h-8 w-8 text-white hover:bg-white/10 hover:text-white"
               >
-                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <Moon className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Sun className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
               </Button>
             </div>
           </div>
@@ -734,17 +785,6 @@ export default function Dashboard() {
                             <ListFilter className="w-4 h-4 text-muted-foreground" />
                             <span className="text-sm font-semibold hover:text-primary cursor-pointer">README.md</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" className="h-7 text-xs font-semibold px-3">
-                              Raw
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                              <Code className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                          </div>
                         </div>
                         <div className="p-8 markdown-body bg-card rounded-b-md">
                           <ReactMarkdown>{readmeContent || 'Loading documentation...'}</ReactMarkdown>
@@ -783,33 +823,6 @@ export default function Dashboard() {
 
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Releases</h3>
-                          <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">1</Badge>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm cursor-pointer group">
-                          <ExternalLink className="w-4 h-4 text-success" />
-                          <div className="flex flex-col">
-                            <span className="font-semibold group-hover:text-primary group-hover:underline">v1.0.0</span>
-                            <span className="text-xs text-muted-foreground">Latest</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator className="bg-border" />
-
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Packages</h3>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          No packages published
-                        </div>
-                      </div>
-
-                      <Separator className="bg-border" />
-
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
                           <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Source Health</h3>
                           <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">{metrics.length}</Badge>
                         </div>
@@ -829,64 +842,6 @@ export default function Dashboard() {
                             + {metrics.length - 5} more sources
                           </Button>
                         )}
-                      </div>
-
-                      <Separator className="bg-border" />
-
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Environments</h3>
-                          <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">1</Badge>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm cursor-pointer group">
-                          <div className="w-2 h-2 rounded-full bg-success" />
-                          <div className="flex flex-col">
-                            <span className="font-semibold group-hover:text-primary group-hover:underline">Cloud Run (Production)</span>
-                            <span className="text-xs text-muted-foreground">europe-west2</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator className="bg-border" />
-
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold hover:text-primary cursor-pointer">Contributors</h3>
-                          <Badge variant="secondary" className="rounded-full px-2 py-0 text-xs font-normal">1</Badge>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs border border-border">
-                            MG
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator className="bg-border" />
-
-                      <div className="space-y-4">
-                        <h3 className="text-sm font-semibold">Languages</h3>
-                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden flex">
-                          <div className="h-full bg-blue-500" style={{ width: '70.2%' }} />
-                          <div className="h-full bg-yellow-500" style={{ width: '19.8%' }} />
-                          <div className="h-full bg-purple-500" style={{ width: '10.0%' }} />
-                        </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-2">
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <div className="w-2 h-2 rounded-full bg-blue-500" />
-                            <span className="font-semibold hover:text-primary cursor-pointer hover:underline">TypeScript</span>
-                            <span className="text-muted-foreground">70.2%</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                            <span className="font-semibold hover:text-primary cursor-pointer hover:underline">JavaScript</span>
-                            <span className="text-muted-foreground">19.8%</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <div className="w-2 h-2 rounded-full bg-purple-500" />
-                            <span className="font-semibold hover:text-primary cursor-pointer hover:underline">CSS</span>
-                            <span className="text-muted-foreground">10.0%</span>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -1026,6 +981,10 @@ export default function Dashboard() {
                         <Button onClick={handleDownloadAll} disabled={files.length === 0} className="github-btn github-btn-secondary">
                           <Download className="w-3 h-3 mr-1.5" />
                           Download All
+                        </Button>
+                        <Button onClick={() => setIsGCSDialogOpen(true)} disabled={files.length === 0} className="github-btn github-btn-secondary">
+                          <Cloud className="w-3 h-3 mr-1.5" />
+                          Export to GCS
                         </Button>
                         <Button onClick={() => fetchData()} className="github-btn github-btn-secondary">
                           <RefreshCw className={`w-3 h-3 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
@@ -1372,47 +1331,18 @@ export default function Dashboard() {
                         <span className="text-sm font-semibold">System Settings</span>
                       </div>
                     </div>
-                    <div className="flex flex-col md:flex-row min-h-[700px]">
-                      {/* Settings Sidebar */}
-                      <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border bg-muted">
-                        <div className="p-4 space-y-1">
-                          <Button variant="ghost" className="w-full justify-start text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20">General</Button>
-                          <Button variant="ghost" className="w-full justify-start text-xs font-semibold text-muted-foreground hover:bg-muted/50">Access Control</Button>
-                          <Button variant="ghost" className="w-full justify-start text-xs font-semibold text-muted-foreground hover:bg-muted/50">Notifications</Button>
-                          <Button variant="ghost" className="w-full justify-start text-xs font-semibold text-muted-foreground hover:bg-muted/50">API & Integration</Button>
-                          <Button variant="ghost" className="w-full justify-start text-xs font-semibold text-muted-foreground hover:bg-muted/50">Advanced</Button>
-                        </div>
-                      </div>
-
+                    <div className="flex flex-col min-h-[700px]">
                       {/* Settings Content */}
                       <div className="flex-1 p-8 space-y-12">
                         <div className="space-y-6">
                           <div>
                             <h3 className="text-xl font-semibold mb-1">General Configuration</h3>
-                            <p className="text-sm text-muted-foreground">Manage your core system preferences and synchronization schedules.</p>
+                            <p className="text-sm text-muted-foreground">Manage your core system preferences and data retention policies.</p>
                           </div>
                           
                           <Separator className="bg-border" />
 
                           <div className="space-y-8 max-w-2xl">
-                            <div className="space-y-3">
-                              <Label className="text-sm font-semibold">Cron Expression</Label>
-                              <div className="flex gap-2">
-                                <Input 
-                                  value={settings.cronExpression || '0 0 1 * *'} 
-                                  onChange={(e) => setSettings({ ...settings, cronExpression: e.target.value })}
-                                  className="h-9 bg-card border-border font-mono text-sm" 
-                                />
-                                <Button 
-                                  onClick={() => updateSetting('cronExpression', settings.cronExpression)}
-                                  className="github-btn github-btn-secondary h-9 px-4"
-                                >
-                                  Save
-                                </Button>
-                              </div>
-                              <p className="text-[12px] text-muted-foreground">The schedule for automated data ingestion. Current: <code className="bg-muted px-1 rounded text-primary">{settings.cronExpression || '0 0 1 * *'}</code></p>
-                            </div>
-
                             <div className="space-y-3">
                               <Label className="text-sm font-semibold">Log Retention (Days)</Label>
                               <Select 
@@ -1452,23 +1382,20 @@ export default function Dashboard() {
                               <div className="text-xl font-mono font-bold text-foreground">{systemStatus?.fileCount || 0}</div>
                             </div>
                             <div className="p-4 bg-muted/30 border border-border rounded-md shadow-sm">
-                              <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">Storage Backend</div>
-                              <div className="text-xl font-mono font-bold text-foreground flex items-center gap-2">
-                                {systemStatus?.storageBackend === 'GCS NATIVE' ? (
-                                  <Cloud className="h-5 w-5 text-blue-500" />
-                                ) : (
-                                  <HardDrive className="h-5 w-5 text-muted-foreground" />
-                                )}
-                                {systemStatus?.storageBackend || 'LOCAL FS'}
+                              <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">Uptime</div>
+                              <div className="text-xl font-mono font-bold text-foreground">
+                                {systemStatus?.uptime ? (
+                                  systemStatus.uptime > 86400 
+                                    ? `${Math.floor(systemStatus.uptime / 86400)}d ${Math.floor((systemStatus.uptime % 86400) / 3600)}h`
+                                    : systemStatus.uptime > 3600
+                                      ? `${Math.floor(systemStatus.uptime / 3600)}h ${Math.floor((systemStatus.uptime % 3600) / 60)}m`
+                                      : `${Math.floor(systemStatus.uptime / 60)}m`
+                                ) : '0m'}
                               </div>
                             </div>
                             <div className="p-4 bg-muted/30 border border-border rounded-md shadow-sm">
-                              <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">Uptime</div>
-                              <div className="text-xl font-mono font-bold text-foreground">99.98%</div>
-                            </div>
-                            <div className="p-4 bg-muted/30 border border-border rounded-md shadow-sm">
                               <div className="text-[11px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">Version</div>
-                              <div className="text-xl font-mono font-bold text-foreground">4.2.0</div>
+                              <div className="text-xl font-mono font-bold text-foreground">{__APP_VERSION__}</div>
                             </div>
                           </div>
                         </div>
@@ -1486,7 +1413,7 @@ export default function Dashboard() {
                                 </div>
                                 <Button 
                                   variant="outline" 
-                                  onClick={purgeSystem}
+                                  onClick={() => setShowPurgeDialog(true)}
                                   disabled={purging}
                                   className="h-8 text-xs font-bold text-error border-error/30 hover:bg-error hover:text-white transition-colors shrink-0"
                                 >
@@ -1499,7 +1426,11 @@ export default function Dashboard() {
                                   <div className="text-sm font-bold text-foreground">Factory Reset</div>
                                   <div className="text-xs text-muted-foreground">Reset all configuration settings to their default values.</div>
                                 </div>
-                                <Button variant="outline" className="h-8 text-xs font-bold text-error border-error/30 hover:bg-error hover:text-white transition-colors shrink-0">
+                                <Button 
+                                  variant="outline" 
+                                  onClick={() => setShowResetDialog(true)}
+                                  className="h-8 text-xs font-bold text-error border-error/30 hover:bg-error hover:text-white transition-colors shrink-0"
+                                >
                                   Reset Settings
                                 </Button>
                               </div>
@@ -1589,6 +1520,126 @@ export default function Dashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isGCSDialogOpen} onOpenChange={setIsGCSDialogOpen}>
+        <DialogContent className="max-w-md bg-card border-border p-0 overflow-hidden">
+          <div className="github-card-header border-b border-border bg-muted/30">
+            <div className="flex items-center gap-3">
+              <Cloud className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold uppercase tracking-wider">Export to GCS</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsGCSDialogOpen(false)}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+          
+          <div className="p-6 space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="projectId" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Google Cloud Project ID</Label>
+                <Input 
+                  id="projectId" 
+                  placeholder="e.g. my-awesome-project" 
+                  value={gcsProjectId} 
+                  onChange={(e) => setGcsProjectId(e.target.value)}
+                  className="bg-muted/30 border-border font-mono text-sm"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="bucketName" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Destination Bucket Name</Label>
+                <Input 
+                  id="bucketName" 
+                  placeholder="e.g. gcp-datanator-backups" 
+                  value={gcsBucketName} 
+                  onChange={(e) => setGcsBucketName(e.target.value)}
+                  className="bg-muted/30 border-border font-mono text-sm"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="authCode" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">OAuth Authorization Code</Label>
+                  <a 
+                    href="https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=postmessage&response_type=code&scope=https://www.googleapis.com/auth/devstorage.read_write&access_type=offline" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-[10px] text-primary hover:underline font-semibold"
+                  >
+                    Get Code
+                  </a>
+                </div>
+                <Input 
+                  id="authCode" 
+                  placeholder="Paste your auth code here..." 
+                  value={gcsAuthCode} 
+                  onChange={(e) => setGcsAuthCode(e.target.value)}
+                  className="bg-muted/30 border-border font-mono text-sm"
+                />
+                <p className="text-[10px] text-muted-foreground italic">
+                  Note: You need to provide a valid OAuth code with GCS write permissions.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+              <Button onClick={() => setIsGCSDialogOpen(false)} className="github-btn github-btn-secondary">
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleGCSExport} 
+                disabled={isExporting || !gcsProjectId || !gcsBucketName || !gcsAuthCode}
+                className="github-btn github-btn-primary"
+              >
+                {isExporting ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 mr-2 animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Cloud className="w-3 h-3 mr-2" />
+                    Start Export
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={showPurgeDialog} onOpenChange={setShowPurgeDialog}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              This action cannot be undone. This will permanently delete ALL data, sync runs, logs, and generated files.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-muted text-foreground hover:bg-muted/80 border-border">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={purgeSystem} className="bg-error text-white hover:bg-error/90">
+              {purging ? 'Purging...' : 'Purge All Data'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">Reset Settings?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Are you sure you want to reset all configuration settings to their default values?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-muted text-foreground hover:bg-muted/80 border-border">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={resetSettings} className="bg-error text-white hover:bg-error/90">
+              Reset Settings
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
